@@ -14,7 +14,7 @@ git remote add origin https://github.com/TEN-GITHUB-CUA-BAN/smart-logistics-plat
 git push -u origin main
 ```
 
-(Thay `TEN-GITHUB-CUA-BAN` — thường là username GitHub, vd. `ngoanhtps-4406` nếu trùng tài khoản Vercel.)
+Repo đã push: **`https://github.com/ngoanhtps-bit/smart-logistics-platform`**
 
 ## Cách 2 — Cài GitHub CLI rồi tạo repo tự động
 
@@ -28,7 +28,7 @@ gh repo create smart-logistics-platform --private --source=. --remote=origin --p
 ## Về nhà — clone
 
 ```powershell
-git clone https://github.com/TEN-GITHUB-CUA-BAN/smart-logistics-platform.git
+git clone https://github.com/ngoanhtps-bit/smart-logistics-platform.git
 cd smart-logistics-platform
 npm install
 # copy .env.local vào thư mục
