@@ -4,7 +4,12 @@
 
 Trong thư mục cha `e:\NGO ANH\` có file:
 
-- **`THIET-KE-LOGICTIC-backup-YYYYMMDD.zip`** — mã nguồn (không gồm `node_modules`, `.next`)
+- **`THIET-KE-LOGICTIC-backup-20260529.zip`** (~300 KB) — mã nguồn từ Git (không gồm `node_modules`, `.next`, `.env`)
+
+**Mang thêm (không nằm trong ZIP/Git):**
+
+- File **`.env.local`** trên máy công ty (copy USB / email bảo mật)
+- File **`client_secret_....json`** (Google OAuth) nếu cần chỉnh OAuth local
 
 ## Ở máy nhà — mở project
 
