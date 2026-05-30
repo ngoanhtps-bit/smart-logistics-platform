@@ -25,6 +25,20 @@ function friendlyAuthError(message: string, email: string) {
   return message;
 }
 
+async function findAuthUserByEmail(client: NonNullable<ReturnType<typeof createSupabaseAdminClient>>, email: string) {
+  let page = 1;
+  const perPage = 200;
+  while (page <= 10) {
+    const { data, error } = await client.auth.admin.listUsers({ page, perPage });
+    if (error) throw new Error(error.message);
+    const hit = data.users.find((u) => u.email?.toLowerCase() === email);
+    if (hit) return hit;
+    if (data.users.length < perPage) break;
+    page += 1;
+  }
+  return null;
+}
+
 export async function adminCreateUser(input: AdminCreateUserInput) {
   const client = createSupabaseAdminClient();
   if (!client) {
@@ -53,13 +67,9 @@ export async function adminCreateUser(input: AdminCreateUserInput) {
   };
 
   let userId: string | null = null;
-
-  const { data: byEmail, error: lookupErr } = await client.auth.admin.getUserByEmail(email);
-  if (lookupErr && !lookupErr.message.toLowerCase().includes("not found")) {
-    throw new Error(lookupErr.message);
-  }
-  if (byEmail?.user) {
-    userId = byEmail.user.id;
+  const existingAuth = await findAuthUserByEmail(client, email);
+  if (existingAuth) {
+    userId = existingAuth.id;
   }
 
   if (!userId) {
@@ -73,7 +83,7 @@ export async function adminCreateUser(input: AdminCreateUserInput) {
     const { error } = await client.auth.admin.updateUserById(userId, {
       password,
       email_confirm: true,
-      user_metadata: { ...(byEmail?.user.user_metadata ?? {}), ...meta }
+      user_metadata: { ...(existingAuth?.user_metadata ?? {}), ...meta }
     });
     if (error) throw new Error(friendlyAuthError(error.message, email));
   } else {
@@ -85,9 +95,9 @@ export async function adminCreateUser(input: AdminCreateUserInput) {
     });
 
     if (error) {
-      const retry = await client.auth.admin.getUserByEmail(email);
-      if (retry.data?.user) {
-        userId = retry.data.user.id;
+      const retry = await findAuthUserByEmail(client, email);
+      if (retry) {
+        userId = retry.id;
         await client.auth.admin.updateUserById(userId, {
           password,
           email_confirm: true,
