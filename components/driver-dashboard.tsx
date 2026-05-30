@@ -1,13 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, Loader2, MapPinned, MessageCircle, Navigation } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  Bell,
+  CheckCircle2,
+  Loader2,
+  MapPinned,
+  Navigation,
+  ThumbsDown,
+  ThumbsUp,
+  Truck
+} from "lucide-react";
 import { useState } from "react";
 import { PodUpload } from "@/components/pod-upload";
-import { useShipments } from "@/hooks/use-shipments";
 import { api } from "@/lib/api/client";
-import type { ShipmentStatus } from "@/types/logistics";
+import type { DriverTripOffer, ShipmentStatus } from "@/types/logistics";
+
+type TripsPayload = {
+  pending: DriverTripOffer[];
+  active: DriverTripOffer[];
+  history: DriverTripOffer[];
+  noDriverProfile?: boolean;
+};
 
 const statusActions: { key: ShipmentStatus; label: string }[] = [
   { key: "pickup", label: "Đã tới điểm lấy" },
@@ -16,21 +31,72 @@ const statusActions: { key: ShipmentStatus; label: string }[] = [
   { key: "delivered", label: "Đã giao hàng" }
 ];
 
+async function fetchTrips() {
+  const res = await fetch("/api/driver/trips", { credentials: "include", cache: "no-store" });
+  const json = await res.json();
+  if (!res.ok) throw new Error(json.message ?? "Không tải được chuyến");
+  return json as TripsPayload;
+}
+
 export function DriverDashboard() {
   const qc = useQueryClient();
-  const { data: shipments, isLoading } = useShipments({ mine: true });
+  const [tab, setTab] = useState<"pending" | "active" | "history">("pending");
+  const [acceptForm, setAcceptForm] = useState({ plate: "", phone: "", note: "" });
+  const [selectedPending, setSelectedPending] = useState<string | null>(null);
   const [gpsMsg, setGpsMsg] = useState<string | null>(null);
 
-  const active =
-    shipments?.find((s) =>
-      ["assigned", "pickup", "loaded", "in_transit"].includes(s.status)
-    ) ?? shipments?.[0];
+  const { data, isLoading, error, refetch } = useQuery({
+    queryKey: ["driver-trips"],
+    queryFn: fetchTrips,
+    refetchInterval: 25_000
+  });
+
+  const { data: notifications } = useQuery({
+    queryKey: ["notifications"],
+    queryFn: () => fetch("/api/notifications").then((r) => r.json()),
+    refetchInterval: 30_000
+  });
+  const unread = (notifications as { read?: boolean }[] | undefined)?.filter((n) => !n.read).length ?? 0;
+
+  const respondMut = useMutation({
+    mutationFn: async ({
+      code,
+      action
+    }: {
+      code: string;
+      action: "accept" | "decline";
+    }) => {
+      const res = await fetch(`/api/driver/trips/${code}`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action,
+          plate: acceptForm.plate,
+          phone: acceptForm.phone,
+          note: acceptForm.note
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message ?? "Thất bại");
+      return json;
+    },
+    onSuccess: () => {
+      setSelectedPending(null);
+      setAcceptForm({ plate: "", phone: "", note: "" });
+      qc.invalidateQueries({ queryKey: ["driver-trips"] });
+      qc.invalidateQueries({ queryKey: ["shipments"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+    }
+  });
+
+  const active = data?.active?.[0];
+  const pendingList = data?.pending ?? [];
 
   const statusMut = useMutation({
-    mutationFn: (status: ShipmentStatus) =>
-      api.patchShipment(active!.code, { status }),
+    mutationFn: (status: ShipmentStatus) => api.patchShipment(active!.code, { status }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["shipments"] });
+      qc.invalidateQueries({ queryKey: ["driver-trips"] });
       qc.invalidateQueries({ queryKey: ["tracking", active?.code] });
     }
   });
@@ -54,90 +120,256 @@ export function DriverDashboard() {
       return res.json();
     },
     onSuccess: () => {
-      setGpsMsg("Đã gửi vị trí GPS lên Supabase");
+      setGpsMsg("Đã gửi vị trí GPS");
       qc.invalidateQueries({ queryKey: ["tracking", active?.code] });
-      qc.invalidateQueries({ queryKey: ["shipments"] });
     },
-    onError: () => setGpsMsg("Không lấy được GPS — bật quyền vị trí trên trình duyệt")
+    onError: () => setGpsMsg("Bật quyền vị trí trên trình duyệt")
   });
+
+  if (data?.noDriverProfile) {
+    return (
+      <div className="rounded-3xl border border-amber-200 bg-amber-50 p-8 text-center">
+        <p className="font-black text-amber-900">Chưa có hồ sơ tài xế</p>
+        <p className="mt-2 text-sm text-amber-800">
+          Admin cần duyệt tài khoản và tạo dòng <code>drivers</code> (đăng ký role Tài xế hoặc admin tạo user tài xế).
+        </p>
+      </div>
+    );
+  }
 
   return (
     <div className="grid gap-6">
-      <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-[#102033] to-[#1e3a5f] p-6 text-white">
-        <p className="text-sm font-black uppercase tracking-[0.12em] text-orange-300">App tài xế</p>
-        <h2 className="mt-2 text-2xl font-black">Chuyến đang được gán</h2>
-        {isLoading ? (
-          <Loader2 className="mt-4 animate-spin" />
-        ) : active ? (
-          <>
-            <p className="mt-3 text-3xl font-black">{active.code}</p>
-            <p className="mt-2 text-slate-300">{active.route}</p>
-            <p className="mt-1 font-bold text-orange-300">
-              {active.vehicleType} · {active.vehiclePlate}
-            </p>
-            <p className="mt-2 text-sm text-slate-400">{active.statusLabel}</p>
-            <Link
-              href={`/tracking/${active.code}`}
-              className="mt-4 inline-block text-sm font-bold text-blue-300 hover:underline"
-            >
-              Mở tracking live →
-            </Link>
-          </>
-        ) : (
-          <p className="mt-4 text-slate-400">Chưa có chuyến — điều phối gán xe trước.</p>
-        )}
-      </section>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <button className="btn-primary" type="button" disabled={!active}>
-          <Navigation size={18} /> Mở GPS Navigation
-        </button>
-        <button className="btn-secondary" type="button">
-          <MessageCircle size={18} /> Chat điều phối
-        </button>
-      </div>
-
-      <section className="rounded-3xl border border-slate-200 bg-white p-6">
-        <h2 className="text-xl font-black text-[#102033]">Cập nhật trạng thái</h2>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {statusActions.map((action) => (
+      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.12em] text-orange-600">App tài xế</p>
+            <h2 className="text-xl font-black text-[#102033]">Chuyến & chốt đơn</h2>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="flex items-center gap-1 rounded-xl bg-blue-50 px-3 py-2 text-sm font-black text-[#2563eb]">
+              <Bell size={16} />
+              {unread > 0 ? `${unread} mới` : "Thông báo"}
+            </span>
+            <button type="button" className="btn-ghost text-sm" onClick={() => refetch()}>
+              Làm mới
+            </button>
+          </div>
+        </div>
+        <p className="mt-2 text-sm text-slate-500">
+          Điều phối gửi chuyến → bạn nhận thông báo → <strong>Chốt</strong> hoặc <strong>Từ chối</strong> → thông tin xe về
+          bảng điều phối.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          {(
+            [
+              ["pending", `Chờ chốt (${pendingList.length})`],
+              ["active", `Đang chạy (${data?.active?.length ?? 0})`],
+              ["history", `Lịch sử (${data?.history?.length ?? 0})`]
+            ] as const
+          ).map(([id, label]) => (
             <button
-              key={action.key}
-              className="flex items-center gap-2 rounded-2xl border border-slate-200 px-4 py-3 text-left font-bold text-slate-700 hover:border-blue-300 hover:bg-blue-50 disabled:opacity-50"
+              key={id}
               type="button"
-              disabled={!active || statusMut.isPending}
-              onClick={() => statusMut.mutate(action.key)}
+              onClick={() => setTab(id)}
+              className={`rounded-xl px-4 py-2 text-sm font-bold ${
+                tab === id ? "bg-[#102033] text-white" : "bg-slate-100 text-slate-600"
+              }`}
             >
-              {statusMut.isPending ? (
-                <Loader2 className="animate-spin text-green-600" size={18} />
-              ) : (
-                <CheckCircle2 className="text-green-600" size={18} />
-              )}
-              {action.label}
+              {label}
             </button>
           ))}
         </div>
-        {statusMut.isSuccess ? (
-          <p className="mt-3 text-sm font-bold text-green-700">Đã cập nhật trạng thái trên Supabase</p>
-        ) : null}
       </section>
 
-      {active ? <PodUpload shipmentCode={active.code} /> : null}
+      {isLoading ? (
+        <p className="flex items-center gap-2 text-slate-500">
+          <Loader2 className="animate-spin" size={18} /> Đang tải chuyến...
+        </p>
+      ) : error ? (
+        <p className="text-sm font-bold text-red-600">{(error as Error).message}</p>
+      ) : null}
 
-      <button
-        className="btn-ghost w-full"
-        type="button"
-        disabled={!active || gpsMut.isPending}
-        onClick={() => gpsMut.mutate()}
-      >
-        {gpsMut.isPending ? (
-          <Loader2 className="animate-spin" size={18} />
-        ) : (
-          <MapPinned size={18} />
-        )}{" "}
-        Gửi vị trí GPS (lưu Supabase)
-      </button>
-      {gpsMsg ? <p className="text-center text-sm font-semibold text-slate-600">{gpsMsg}</p> : null}
+      {tab === "pending" ? (
+        <div className="grid gap-4">
+          {pendingList.length === 0 ? (
+            <p className="rounded-2xl bg-slate-50 p-8 text-center text-sm font-semibold text-slate-500">
+              Không có chuyến chờ chốt. Khi điều phối tạo đơn / gửi cho bạn, thông báo sẽ hiện ở chuông trên thanh menu.
+            </p>
+          ) : (
+            pendingList.map((trip) => (
+              <article
+                key={trip.code}
+                className={`rounded-3xl border p-5 shadow-sm ${
+                  selectedPending === trip.code ? "border-[#2563eb] bg-blue-50/40" : "border-slate-200 bg-white"
+                }`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div>
+                    <p className="text-2xl font-black text-[#102033]">{trip.code}</p>
+                    <p className="mt-1 font-semibold text-slate-600">{trip.route}</p>
+                    <p className="mt-2 text-sm text-slate-500">
+                      {trip.cargoType} · {trip.weight} · {trip.vehicleType}
+                    </p>
+                    <p className="mt-1 text-xs font-bold text-amber-700">ETA {trip.eta}</p>
+                  </div>
+                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-900">
+                    Chờ bạn chốt
+                  </span>
+                </div>
+
+                {selectedPending === trip.code ? (
+                  <div className="mt-4 grid gap-2 border-t border-slate-200 pt-4">
+                    <input
+                      className="rounded-xl border px-3 py-2 text-sm font-semibold"
+                      placeholder="Biển số xe bạn chạy *"
+                      value={acceptForm.plate}
+                      onChange={(e) => setAcceptForm({ ...acceptForm, plate: e.target.value })}
+                    />
+                    <input
+                      className="rounded-xl border px-3 py-2 text-sm font-semibold"
+                      placeholder="SĐT liên hệ"
+                      value={acceptForm.phone}
+                      onChange={(e) => setAcceptForm({ ...acceptForm, phone: e.target.value })}
+                    />
+                    <input
+                      className="rounded-xl border px-3 py-2 text-sm font-semibold"
+                      placeholder="Ghi chú (tuỳ chọn)"
+                      value={acceptForm.note}
+                      onChange={(e) => setAcceptForm({ ...acceptForm, note: e.target.value })}
+                    />
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        type="button"
+                        className="btn-primary flex-1"
+                        disabled={!acceptForm.plate || respondMut.isPending}
+                        onClick={() => respondMut.mutate({ code: trip.code, action: "accept" })}
+                      >
+                        <ThumbsUp size={18} /> Xác nhận chạy
+                      </button>
+                      <button
+                        type="button"
+                        className="btn-secondary flex-1"
+                        disabled={respondMut.isPending}
+                        onClick={() => respondMut.mutate({ code: trip.code, action: "decline" })}
+                      >
+                        <ThumbsDown size={18} /> Từ chối
+                      </button>
+                    </div>
+                    {respondMut.isError ? (
+                      <p className="text-xs font-bold text-red-600">{(respondMut.error as Error).message}</p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn-primary mt-4 w-full"
+                    onClick={() => {
+                      setSelectedPending(trip.code);
+                      setAcceptForm({ plate: "", phone: "", note: "" });
+                    }}
+                  >
+                    <Truck size={18} /> Chốt chuyến này
+                  </button>
+                )}
+              </article>
+            ))
+          )}
+        </div>
+      ) : null}
+
+      {tab === "active" ? (
+        <div className="grid gap-6">
+          {!active ? (
+            <p className="rounded-2xl bg-slate-50 p-8 text-center text-sm text-slate-500">
+              Chưa có chuyến đang chạy — chốt chuyến ở tab «Chờ chốt» trước.
+            </p>
+          ) : (
+            <>
+              <section className="rounded-3xl border border-slate-200 bg-gradient-to-br from-[#102033] to-[#1e3a5f] p-6 text-white">
+                <p className="text-sm font-black uppercase text-orange-300">Chuyến đang chạy</p>
+                <p className="mt-2 text-3xl font-black">{active.code}</p>
+                <p className="mt-2 text-slate-300">{active.route}</p>
+                <p className="mt-2 font-bold text-orange-300">
+                  {active.driverReportPlate || "—"} · {active.vehicleType}
+                </p>
+                <p className="text-sm text-slate-400">{active.statusLabel}</p>
+                <Link href={`/tracking/${active.code}`} className="mt-3 inline-block text-sm font-bold text-blue-300">
+                  Tracking live →
+                </Link>
+              </section>
+
+              <section className="rounded-3xl border border-slate-200 bg-white p-6">
+                <h3 className="font-black text-[#102033]">Cập nhật trạng thái</h3>
+                <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                  {statusActions.map((action) => (
+                    <button
+                      key={action.key}
+                      type="button"
+                      className="flex items-center gap-2 rounded-2xl border px-4 py-3 font-bold hover:bg-blue-50 disabled:opacity-50"
+                      disabled={statusMut.isPending}
+                      onClick={() => statusMut.mutate(action.key)}
+                    >
+                      <CheckCircle2 className="text-green-600" size={18} />
+                      {action.label}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <PodUpload shipmentCode={active.code} />
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button className="btn-primary" type="button" disabled={!active}>
+                  <Navigation size={18} /> GPS Navigation
+                </button>
+                <button
+                  className="btn-ghost"
+                  type="button"
+                  disabled={gpsMut.isPending}
+                  onClick={() => gpsMut.mutate()}
+                >
+                  <MapPinned size={18} /> Gửi vị trí
+                </button>
+              </div>
+              {gpsMsg ? <p className="text-center text-sm font-semibold text-slate-600">{gpsMsg}</p> : null}
+            </>
+          )}
+          {(data?.active?.length ?? 0) > 1 ? (
+            <div className="grid gap-2">
+              <p className="text-xs font-bold uppercase text-slate-400">Chuyến khác đang chạy</p>
+              {data?.active?.slice(1).map((t) => (
+                <Link
+                  key={t.code}
+                  href={`/tracking/${t.code}`}
+                  className="rounded-xl border border-slate-100 p-3 font-bold text-[#2563eb]"
+                >
+                  {t.code} · {t.route}
+                </Link>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {tab === "history" ? (
+        <div className="grid gap-2">
+          {(data?.history ?? []).length === 0 ? (
+            <p className="text-sm text-slate-500">Chưa có lịch sử.</p>
+          ) : (
+            data?.history?.map((t) => (
+              <Link
+                key={t.code}
+                href={`/tracking/${t.code}`}
+                className="rounded-2xl border border-slate-100 bg-white p-4 hover:bg-slate-50"
+              >
+                <p className="font-black">{t.code}</p>
+                <p className="text-sm text-slate-600">{t.route}</p>
+                <p className="text-xs font-bold text-slate-500">{t.statusLabel}</p>
+              </Link>
+            ))
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

@@ -280,6 +280,16 @@ Tab mặc định **Gán xe & đơn**:
 
 Các tab khác: **Đội xe**, **Luồng đơn** (kanban + xóa đơn lỗi), **Bản đồ**, **Khác** (KPI, hóa đơn).
 
+**Gửi chốt qua app tài xế:** chọn đơn → chọn **Tài xế đăng ký app** → **Gửi chốt — báo app tài xế**. Tài xế vào `/driver` tab **Chờ chốt** → **Xác nhận chạy** (nhập biển số) hoặc **Từ chối**. Điều phối nhận thông báo khi tài xế chốt.
+
+### App tài xế (`/driver`)
+
+- Tab **Chờ chốt**: danh sách chuyến điều phối gửi — xác nhận / từ chối.
+- Tab **Đang chạy**: cập nhật trạng thái, GPS, POD.
+- Thông báo chuông (menu) khi có đơn mới hoặc chuyến cần chốt.
+
+Chạy SQL `supabase/019_driver_trip_offers.sql` trên Supabase.
+
 ### Tab **Loại xe** (CMS → trang chủ)
 
 1. Chạy SQL `supabase/018_vehicle_categories_cms.sql` trên Supabase (lần đầu).

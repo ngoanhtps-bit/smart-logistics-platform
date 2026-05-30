@@ -39,6 +39,8 @@ export interface QuoteResponse {
   message: string;
 }
 
+export type DriverOfferStatus = "none" | "pending" | "accepted" | "declined";
+
 export interface Shipment {
   code: string;
   customerId?: string;
@@ -55,7 +57,42 @@ export interface Shipment {
   cargoType: string;
   weight: string;
   createdAt: string;
+  offerStatus?: DriverOfferStatus;
+  targetDriverId?: string | null;
+  driverConfirmedAt?: string;
+  driverReportPlate?: string;
+  driverReportPhone?: string;
+  driverNote?: string;
 }
+
+export interface DriverTripOffer {
+  code: string;
+  route: string;
+  pickup: string;
+  delivery: string;
+  cargoType: string;
+  weight: string;
+  vehicleType: string;
+  status: ShipmentStatus;
+  statusLabel: string;
+  eta: string;
+  offerStatus: DriverOfferStatus;
+  targetDriverId: string | null;
+  driverConfirmedAt?: string;
+  driverReportPlate?: string;
+  driverReportPhone?: string;
+  driverNote?: string;
+}
+
+export type RegisteredDriver = {
+  userId: string;
+  driverId: string;
+  name: string;
+  phone: string;
+  email: string;
+  plate: string;
+  vehicleType: string;
+};
 
 export interface TrackingPoint {
   latitude: number;

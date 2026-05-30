@@ -3,6 +3,7 @@ import { getClientIp, rateLimit } from "@/lib/rate-limit";
 import { notifyShipmentEvent } from "@/lib/notification-hub";
 import { resolveShipmentListFilters } from "@/lib/auth/shipment-scope";
 import { getSessionUser } from "@/lib/auth/session";
+import { notifyAllDriversNewShipment } from "@/lib/driver/trips";
 import { createShipment, deleteShipments, listShipments } from "@/lib/repositories/shipment.repository";
 import { requireApiRoles } from "@/lib/auth/api-guard";
 import { isDeletableShipmentStatus } from "@/lib/shipments/deletable-status";
@@ -44,6 +45,7 @@ export async function POST(request: Request) {
       phone: user?.phone ?? "0901668888",
       email: user?.email ?? "ops@smartlogistics.vn"
     });
+    void notifyAllDriversNewShipment(shipment.code, shipment.route);
     return NextResponse.json(shipment, { status: 201 });
   } catch {
     return NextResponse.json({ message: "Không tạo được đơn" }, { status: 500 });

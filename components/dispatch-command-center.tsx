@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { AlertCircle, CheckCircle2, Loader2, Plus, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -13,7 +13,7 @@ import {
   isUnassignedVehicle,
   shipmentNeedsAssign
 } from "@/lib/dispatch/shipment-assign";
-import type { Shipment, ShipmentStatus } from "@/types/logistics";
+import type { RegisteredDriver, Shipment, ShipmentStatus } from "@/types/logistics";
 
 async function createOrder(body: Record<string, string>) {
   const res = await fetch("/api/shipments", {
@@ -61,12 +61,22 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
     vehicleType: "Container 40FT"
   });
 
+  const [targetDriverUserId, setTargetDriverUserId] = useState("");
   const [assign, setAssign] = useState({
     driverName: "",
     driverPhone: "",
     vehiclePlate: "",
     vehicleType: "",
     status: "assigned" as ShipmentStatus
+  });
+
+  const { data: registeredDrivers } = useQuery({
+    queryKey: ["registered-drivers"],
+    queryFn: async () => {
+      const res = await fetch("/api/drivers/register", { credentials: "include" });
+      const json = await res.json();
+      return (json.drivers ?? []) as RegisteredDriver[];
+    }
   });
 
   const pendingCount = useMemo(
@@ -140,11 +150,40 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
     }
   });
 
+  const offerMut = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/dispatcher/offer-trip", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          code: selectedCode,
+          targetDriverUserId,
+          vehiclePlate: assign.vehiclePlate,
+          vehicleType: assign.vehicleType
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message ?? "Gửi chuyến thất bại");
+      return json;
+    },
+    onSuccess: (data: { message?: string }) => {
+      setMsgOk(true);
+      setMsg(data.message ?? "Đã gửi — tài xế chốt trên app.");
+      qc.invalidateQueries({ queryKey: ["shipments"] });
+      qc.invalidateQueries({ queryKey: ["notifications"] });
+    },
+    onError: (e) => {
+      setMsgOk(false);
+      setMsg((e as Error).message);
+    }
+  });
+
   const assignMut = useMutation({
     mutationFn: () => assignOrder(selectedCode, assign),
     onSuccess: () => {
       setMsgOk(true);
-      setMsg(`Đã gán xe ${assign.vehiclePlate} cho ${selectedCode}.`);
+      setMsg(`Đã gán nhanh (không qua app) ${assign.vehiclePlate} → ${selectedCode}.`);
       qc.invalidateQueries({ queryKey: ["shipments"] });
       qc.invalidateQueries({ queryKey: ["fleet"] });
       qc.invalidateQueries({ queryKey: ["tracking", selectedCode] });
@@ -163,6 +202,20 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
       vehicleType: v?.type ?? assign.vehicleType,
       driverName: v && v.driver !== "—" ? v.driver : assign.driverName
     });
+  }
+
+  function pickRegisteredDriver(userId: string) {
+    setTargetDriverUserId(userId);
+    const d = registeredDrivers?.find((x) => x.userId === userId);
+    if (d) {
+      setAssign({
+        ...assign,
+        driverName: d.name,
+        driverPhone: d.phone,
+        vehiclePlate: d.plate || assign.vehiclePlate,
+        vehicleType: d.vehicleType || assign.vehicleType
+      });
+    }
   }
 
   return (
@@ -320,7 +373,7 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
           <section className="rounded-3xl border-2 border-orange-200 bg-orange-50/50 p-5 shadow-sm">
             <h3 className="flex items-center gap-2 text-lg font-black text-[#102033]">
               <UserPlus className="text-[#2563eb]" size={22} />
-              Gán tài xế & xe
+              Gửi chuyến cho tài xế (App)
             </h3>
             {!selectedCode ? (
               <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-amber-800">
@@ -333,7 +386,26 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
                   {selected ? ` · ${selected.route}` : null}
                 </p>
                 <div className="mt-4 grid gap-2">
-                  <label className="text-xs font-bold uppercase text-slate-500">Xe từ đội *</label>
+                  <label className="text-xs font-bold uppercase text-slate-500">Tài xế đăng ký app *</label>
+                  <select
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold"
+                    value={targetDriverUserId}
+                    onChange={(e) => pickRegisteredDriver(e.target.value)}
+                  >
+                    <option value="">— Chọn tài xế (đã duyệt) —</option>
+                    {(registeredDrivers ?? []).map((d) => (
+                      <option key={d.userId} value={d.userId}>
+                        {d.name} · {d.phone || d.email}
+                        {d.plate ? ` · ${d.plate}` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {!registeredDrivers?.length ? (
+                    <p className="text-xs text-amber-800">
+                      Chưa có tài xế trong hệ thống — admin tạo/duyệt tài khoản role Tài xế.
+                    </p>
+                  ) : null}
+                  <label className="text-xs font-bold uppercase text-slate-500">Xe gợi ý (tuỳ chọn)</label>
                   <select
                     className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold"
                     value={assign.vehiclePlate}
@@ -380,17 +452,39 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
                 <button
                   className="btn-primary mt-4 w-full"
                   type="button"
-                  disabled={!assign.vehiclePlate || !assign.driverName || assignMut.isPending}
-                  onClick={() => assignMut.mutate()}
+                  disabled={!targetDriverUserId || offerMut.isPending}
+                  onClick={() => offerMut.mutate()}
                 >
-                  {assignMut.isPending ? (
+                  {offerMut.isPending ? (
                     <Loader2 className="animate-spin" size={18} />
                   ) : (
                     <>
-                      <CheckCircle2 size={18} className="mr-1 inline" /> Gán chuyến
+                      <CheckCircle2 size={18} className="mr-1 inline" /> Gửi chốt — báo app tài xế
                     </>
                   )}
                 </button>
+                <p className="mt-2 text-center text-xs text-slate-500">
+                  Tài xế nhận thông báo → vào /driver → Xác nhận / Từ chối → dữ liệu xe về đây.
+                </p>
+                <details className="mt-4 rounded-xl border border-slate-200 bg-white p-3">
+                  <summary className="cursor-pointer text-sm font-bold text-slate-600">Gán nhanh (không qua app)</summary>
+                  <div className="mt-3 grid gap-2">
+                    <input
+                      className="rounded-xl border px-3 py-2 text-sm font-semibold"
+                      placeholder="Tên tài xế"
+                      value={assign.driverName}
+                      onChange={(e) => setAssign({ ...assign, driverName: e.target.value })}
+                    />
+                    <button
+                      className="btn-secondary w-full"
+                      type="button"
+                      disabled={!assign.vehiclePlate || !assign.driverName || assignMut.isPending}
+                      onClick={() => assignMut.mutate()}
+                    >
+                      Gán trực tiếp
+                    </button>
+                  </div>
+                </details>
                 {selected && canReassignShipment(selected) ? (
                   <Link
                     href={`/tracking/${selectedCode}`}

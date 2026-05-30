@@ -79,7 +79,7 @@ export function AdminCmsPanel() {
             <ul className="mt-4 grid gap-1 font-mono text-xs text-slate-600">
               <li>010_operational_tables.sql · 011_operational_rls.sql</li>
               <li>012_invoices.sql · 013_storage_documents.sql</li>
-              <li>014_cms_blog.sql · 016_account_approval.sql · 018_vehicle_categories_cms.sql</li>
+              <li>014–018 CMS · 019_driver_trip_offers.sql (chốt chuyến tài xế)</li>
             </ul>
           </section>
         </div>
