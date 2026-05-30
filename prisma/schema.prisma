@@ -1,0 +1,135 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum UserRole {
+  customer
+  dispatcher
+  admin
+  driver
+}
+
+enum VehicleStatus {
+  available
+  busy
+  maintenance
+  offline
+}
+
+enum ShipmentStatus {
+  draft
+  quoted
+  assigned
+  pickup
+  loaded
+  in_transit
+  delivered
+  cancelled
+}
+
+model User {
+  id        String   @id @default(cuid())
+  role      UserRole
+  name      String
+  phone     String?
+  email     String   @unique
+  password  String
+  avatar    String?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  customerShipments Shipment[] @relation("CustomerShipments")
+  driverProfile     Driver?
+
+  @@map("users")
+}
+
+model Vehicle {
+  id          String        @id @default(cuid())
+  type        String
+  plateNumber String        @unique @map("plate_number")
+  capacity    String?
+  status      VehicleStatus @default(available)
+  gpsDeviceId String?       @map("gps_device_id")
+  lat         Float?
+  lng         Float?
+
+  driver    Driver?
+  shipments Shipment[]
+
+  @@map("vehicles")
+}
+
+model Driver {
+  id              String  @id @default(cuid())
+  userId          String  @unique @map("user_id")
+  licenseNumber   String  @map("license_number")
+  currentLocation String? @map("current_location")
+  rating          Float?  @default(5)
+
+  user      User       @relation(fields: [userId], references: [id])
+  vehicle   Vehicle?   @relation(fields: [vehicleId], references: [id])
+  vehicleId String?    @unique @map("vehicle_id")
+  shipments Shipment[]
+
+  @@map("drivers")
+}
+
+model Shipment {
+  id               String         @id @default(cuid())
+  code             String         @unique
+  customerId       String         @map("customer_id")
+  driverId         String?        @map("driver_id")
+  vehicleId        String?        @map("vehicle_id")
+  pickupLocation   String         @map("pickup_location")
+  deliveryLocation String         @map("delivery_location")
+  cargoType        String         @map("cargo_type")
+  weight           String?
+  dimensions       String?
+  vehicleType      String?        @map("vehicle_type")
+  status           ShipmentStatus @default(draft)
+  eta              DateTime?
+
+  customer  User               @relation("CustomerShipments", fields: [customerId], references: [id])
+  driver    Driver?            @relation(fields: [driverId], references: [id])
+  vehicle   Vehicle?           @relation(fields: [vehicleId], references: [id])
+  tracking  ShipmentTracking[]
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("shipments")
+}
+
+model ShipmentTracking {
+  id         String   @id @default(cuid())
+  shipmentId String   @map("shipment_id")
+  latitude   Float
+  longitude  Float
+  speed      Float?
+  timestamp  DateTime @default(now())
+
+  shipment Shipment @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+
+  @@index([shipmentId, timestamp])
+  @@map("shipment_tracking")
+}
+
+model RoutePricing {
+  id          String  @id @default(cuid())
+  fromCity    String  @map("from_city")
+  toCity      String  @map("to_city")
+  slug        String  @unique
+  container20 String? @map("container_20")
+  container40 String? @map("container_40")
+  transitDays String? @map("transit_days")
+  metaTitle   String? @map("meta_title")
+  metaDesc    String? @map("meta_desc")
+
+  @@map("route_pricing")
+}

@@ -1,0 +1,433 @@
+"use client";
+
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import Link from "next/link";
+import { AlertCircle, CheckCircle2, Loader2, Plus, UserPlus } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ListToolbar } from "@/components/list-toolbar";
+import { useFleet, useShipments } from "@/hooks/use-shipments";
+import { matchesSearch } from "@/lib/list-search";
+import {
+  canReassignShipment,
+  isUnassignedDriver,
+  isUnassignedVehicle,
+  shipmentNeedsAssign
+} from "@/lib/dispatch/shipment-assign";
+import type { Shipment, ShipmentStatus } from "@/types/logistics";
+
+async function createOrder(body: Record<string, string>) {
+  const res = await fetch("/api/shipments", {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) throw new Error("Tạo đơn thất bại");
+  return res.json();
+}
+
+async function assignOrder(code: string, body: Record<string, string>) {
+  const res = await fetch(`/api/shipments/${code}`, {
+    method: "PATCH",
+    credentials: "include",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error((data as { message?: string }).message ?? "Gán xe thất bại");
+  }
+  return res.json();
+}
+
+type FilterMode = "need_assign" | "active" | "all";
+
+export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode?: string | null }) {
+  const qc = useQueryClient();
+  const { data: shipments, isLoading, isError } = useShipments();
+  const { data: fleet } = useFleet();
+
+  const [filter, setFilter] = useState<FilterMode>("need_assign");
+  const [search, setSearch] = useState("");
+  const [selectedCode, setSelectedCode] = useState(initialAssignCode ?? "");
+  const [msg, setMsg] = useState("");
+  const [msgOk, setMsgOk] = useState(true);
+
+  const [form, setForm] = useState({
+    pickup: "Hải Phòng",
+    delivery: "Bình Dương",
+    cargoType: "Pallet",
+    weight: "15 tấn",
+    vehicleType: "Container 40FT"
+  });
+
+  const [assign, setAssign] = useState({
+    driverName: "",
+    driverPhone: "",
+    vehiclePlate: "",
+    vehicleType: "",
+    status: "assigned" as ShipmentStatus
+  });
+
+  const pendingCount = useMemo(
+    () => (shipments ?? []).filter(shipmentNeedsAssign).length,
+    [shipments]
+  );
+  const activeCount = useMemo(
+    () =>
+      (shipments ?? []).filter((s) => s.status !== "delivered" && s.status !== "cancelled").length,
+    [shipments]
+  );
+  const freeFleet = useMemo(
+    () => (fleet ?? []).filter((v) => v.status.includes("rỗng") || v.status.toLowerCase().includes("available")).length,
+    [fleet]
+  );
+
+  const filteredList = useMemo(() => {
+    let list = shipments ?? [];
+    if (filter === "need_assign") list = list.filter(shipmentNeedsAssign);
+    else if (filter === "active")
+      list = list.filter((s) => s.status !== "delivered" && s.status !== "cancelled");
+    const q = search.trim();
+    if (q) {
+      list = list.filter((s) =>
+        matchesSearch(q, [s.code, s.route, s.driver, s.vehiclePlate, s.statusLabel, s.cargoType])
+      );
+    }
+    return list;
+  }, [shipments, filter, search]);
+
+  const selected = useMemo(
+    () => shipments?.find((s) => s.code === selectedCode),
+    [shipments, selectedCode]
+  );
+
+  useEffect(() => {
+    if (initialAssignCode) setSelectedCode(initialAssignCode);
+  }, [initialAssignCode]);
+
+  useEffect(() => {
+    if (!selected && filteredList.length) {
+      const first = filteredList.find(shipmentNeedsAssign) ?? filteredList[0];
+      setSelectedCode(first.code);
+    }
+  }, [filteredList, selected]);
+
+  useEffect(() => {
+    if (!selected) return;
+    const v = fleet?.find((f) => f.plate === selected.vehiclePlate && !isUnassignedVehicle(selected.vehiclePlate));
+    setAssign({
+      driverName: isUnassignedDriver(selected.driver) ? (v?.driver !== "—" ? v?.driver ?? "" : "") : selected.driver,
+      driverPhone: selected.driverPhone || "",
+      vehiclePlate: isUnassignedVehicle(selected.vehiclePlate) ? "" : selected.vehiclePlate,
+      vehicleType: selected.vehicleType !== "—" ? selected.vehicleType : v?.type ?? "",
+      status: selected.status === "draft" || selected.status === "quoted" ? "assigned" : selected.status
+    });
+  }, [selected, fleet]);
+
+  const createMut = useMutation({
+    mutationFn: () => createOrder(form),
+    onSuccess: (data: { code: string }) => {
+      setMsgOk(true);
+      setMsg(`Đã tạo đơn ${data.code} — chọn bên dưới để gán xe.`);
+      setSelectedCode(data.code);
+      setFilter("need_assign");
+      qc.invalidateQueries({ queryKey: ["shipments"] });
+    },
+    onError: (e) => {
+      setMsgOk(false);
+      setMsg((e as Error).message);
+    }
+  });
+
+  const assignMut = useMutation({
+    mutationFn: () => assignOrder(selectedCode, assign),
+    onSuccess: () => {
+      setMsgOk(true);
+      setMsg(`Đã gán xe ${assign.vehiclePlate} cho ${selectedCode}.`);
+      qc.invalidateQueries({ queryKey: ["shipments"] });
+      qc.invalidateQueries({ queryKey: ["fleet"] });
+      qc.invalidateQueries({ queryKey: ["tracking", selectedCode] });
+    },
+    onError: (e) => {
+      setMsgOk(false);
+      setMsg((e as Error).message);
+    }
+  });
+
+  function pickFleet(plate: string) {
+    const v = fleet?.find((f) => f.plate === plate);
+    setAssign({
+      ...assign,
+      vehiclePlate: plate,
+      vehicleType: v?.type ?? assign.vehicleType,
+      driverName: v && v.driver !== "—" ? v.driver : assign.driverName
+    });
+  }
+
+  return (
+    <div className="grid gap-6">
+      <section className="rounded-3xl border-2 border-[#2563eb]/30 bg-gradient-to-br from-[#f0f7ff] to-white p-6 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-sm font-black uppercase tracking-[0.12em] text-[#2563eb]">Trung tâm điều phối</p>
+            <h2 className="mt-1 text-2xl font-black text-[#102033]">Gán xe & quản lý đơn</h2>
+            <p className="mt-2 max-w-xl text-sm text-slate-600">
+              Chọn đơn trong bảng → chọn xe từ đội → bấm <strong>Gán chuyến</strong>. Mọi đơn chưa có tài xế/biển số đều
+              hiển thị ở đây (không chỉ đơn báo giá).
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-xl bg-amber-100 px-4 py-2 text-sm font-black text-amber-900">
+              {pendingCount} chờ gán
+            </span>
+            <span className="rounded-xl bg-blue-100 px-4 py-2 text-sm font-black text-blue-900">
+              {activeCount} đang xử lý
+            </span>
+            <span className="rounded-xl bg-emerald-100 px-4 py-2 text-sm font-black text-emerald-900">
+              {freeFleet} xe rỗng
+            </span>
+          </div>
+        </div>
+
+        {msg ? (
+          <p
+            className={`mt-4 rounded-xl p-3 text-sm font-bold ${msgOk ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700"}`}
+          >
+            {msg}
+          </p>
+        ) : null}
+      </section>
+
+      <div className="grid gap-6 xl:grid-cols-[1.35fr_1fr]">
+        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <h3 className="text-lg font-black text-[#102033]">Danh sách đơn</h3>
+            <div className="flex flex-wrap gap-2">
+              {(
+                [
+                  ["need_assign", "Chờ gán xe"],
+                  ["active", "Đang chạy"],
+                  ["all", "Tất cả"]
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setFilter(id)}
+                  className={`rounded-xl px-3 py-2 text-sm font-bold ${
+                    filter === id ? "bg-[#102033] text-white" : "border border-slate-200 text-slate-600"
+                  }`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <ListToolbar
+            search={search}
+            onSearchChange={setSearch}
+            placeholder="Tìm mã SPL, tuyến, tài xế, biển số…"
+            total={shipments?.length ?? 0}
+            filtered={filteredList.length}
+            selectedCount={0}
+            allSelected={false}
+            onSelectAll={() => {}}
+            onClearSelection={() => {}}
+          />
+
+          {isLoading ? (
+            <p className="flex items-center gap-2 py-8 text-slate-500">
+              <Loader2 className="animate-spin" size={18} /> Đang tải đơn...
+            </p>
+          ) : isError ? (
+            <p className="text-sm font-bold text-red-600">Không tải được đơn — kiểm tra Supabase / đăng nhập điều phối.</p>
+          ) : filteredList.length === 0 ? (
+            <p className="rounded-2xl bg-slate-50 p-6 text-center text-sm font-semibold text-slate-500">
+              {filter === "need_assign"
+                ? "Không có đơn chờ gán — tạo đơn mới hoặc xem tab «Tất cả»."
+                : "Không có đơn phù hợp bộ lọc."}
+            </p>
+          ) : (
+            <div className="overflow-x-auto rounded-2xl border border-slate-100">
+              <table className="w-full min-w-[640px] text-left text-sm">
+                <thead className="bg-[#102033] text-xs font-black uppercase text-white">
+                  <tr>
+                    <th className="px-4 py-3">Mã đơn</th>
+                    <th className="px-4 py-3">Tuyến</th>
+                    <th className="px-4 py-3">Trạng thái</th>
+                    <th className="px-4 py-3">Tài xế</th>
+                    <th className="px-4 py-3">Xe</th>
+                    <th className="px-4 py-3" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredList.map((s) => {
+                    const need = shipmentNeedsAssign(s);
+                    const isSelected = s.code === selectedCode;
+                    return (
+                      <tr
+                        key={s.code}
+                        className={`border-t border-slate-100 ${isSelected ? "bg-blue-50" : "bg-white hover:bg-slate-50"}`}
+                      >
+                        <td className="px-4 py-3 font-black text-[#102033]">{s.code}</td>
+                        <td className="max-w-[200px] truncate px-4 py-3 font-semibold text-slate-600">{s.route}</td>
+                        <td className="px-4 py-3">
+                          <span
+                            className={`rounded-full px-2 py-1 text-xs font-black ${
+                              need ? "bg-amber-100 text-amber-800" : "bg-slate-100 text-slate-700"
+                            }`}
+                          >
+                            {s.statusLabel}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3">
+                          {isUnassignedDriver(s.driver) ? (
+                            <span className="font-bold text-amber-600">Chưa gán</span>
+                          ) : (
+                            s.driver
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          {isUnassignedVehicle(s.vehiclePlate) ? (
+                            <span className="font-bold text-amber-600">—</span>
+                          ) : (
+                            s.vehiclePlate
+                          )}
+                        </td>
+                        <td className="px-4 py-3">
+                          <button
+                            type="button"
+                            className={`rounded-lg px-3 py-1.5 text-xs font-black ${
+                              isSelected ? "bg-[#2563eb] text-white" : "bg-orange-100 text-orange-800"
+                            }`}
+                            onClick={() => setSelectedCode(s.code)}
+                          >
+                            {isSelected ? "Đang chọn" : "Gán xe"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <div className="grid gap-4">
+          <section className="rounded-3xl border-2 border-orange-200 bg-orange-50/50 p-5 shadow-sm">
+            <h3 className="flex items-center gap-2 text-lg font-black text-[#102033]">
+              <UserPlus className="text-[#2563eb]" size={22} />
+              Gán tài xế & xe
+            </h3>
+            {!selectedCode ? (
+              <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-amber-800">
+                <AlertCircle size={16} /> Chọn một đơn trong bảng bên trái.
+              </p>
+            ) : (
+              <>
+                <p className="mt-2 text-sm font-bold text-slate-600">
+                  Đơn: <span className="text-[#102033]">{selectedCode}</span>
+                  {selected ? ` · ${selected.route}` : null}
+                </p>
+                <div className="mt-4 grid gap-2">
+                  <label className="text-xs font-bold uppercase text-slate-500">Xe từ đội *</label>
+                  <select
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm font-semibold"
+                    value={assign.vehiclePlate}
+                    onChange={(e) => pickFleet(e.target.value)}
+                  >
+                    <option value="">— Chọn biển số —</option>
+                    {fleet?.map((v) => (
+                      <option key={v.plate} value={v.plate}>
+                        {v.plate} · {v.type} · {v.driver} · {v.status}
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold"
+                    placeholder="Tên tài xế *"
+                    value={assign.driverName}
+                    onChange={(e) => setAssign({ ...assign, driverName: e.target.value })}
+                  />
+                  <input
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold"
+                    placeholder="SĐT tài xế"
+                    value={assign.driverPhone}
+                    onChange={(e) => setAssign({ ...assign, driverPhone: e.target.value })}
+                  />
+                  <input
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold"
+                    placeholder="Loại xe"
+                    value={assign.vehicleType}
+                    onChange={(e) => setAssign({ ...assign, vehicleType: e.target.value })}
+                  />
+                  <label className="text-xs font-bold uppercase text-slate-500">Cập nhật trạng thái</label>
+                  <select
+                    className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold"
+                    value={assign.status}
+                    onChange={(e) => setAssign({ ...assign, status: e.target.value as ShipmentStatus })}
+                  >
+                    <option value="assigned">Đã gán xe</option>
+                    <option value="pickup">Đang lấy hàng</option>
+                    <option value="loaded">Đã xếp hàng</option>
+                    <option value="in_transit">Đang vận chuyển</option>
+                    <option value="delivered">Đã giao</option>
+                  </select>
+                </div>
+                <button
+                  className="btn-primary mt-4 w-full"
+                  type="button"
+                  disabled={!assign.vehiclePlate || !assign.driverName || assignMut.isPending}
+                  onClick={() => assignMut.mutate()}
+                >
+                  {assignMut.isPending ? (
+                    <Loader2 className="animate-spin" size={18} />
+                  ) : (
+                    <>
+                      <CheckCircle2 size={18} className="mr-1 inline" /> Gán chuyến
+                    </>
+                  )}
+                </button>
+                {selected && canReassignShipment(selected) ? (
+                  <Link
+                    href={`/tracking/${selectedCode}`}
+                    className="mt-2 block text-center text-sm font-bold text-[#2563eb]"
+                  >
+                    Xem theo dõi →
+                  </Link>
+                ) : null}
+              </>
+            )}
+          </section>
+
+          <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <h3 className="flex items-center gap-2 font-black text-[#102033]">
+              <Plus size={18} className="text-orange-600" /> Tạo đơn nhanh
+            </h3>
+            <div className="mt-3 grid gap-2">
+              {(["pickup", "delivery", "cargoType", "weight", "vehicleType"] as const).map((key) => (
+                <input
+                  key={key}
+                  className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-semibold"
+                  value={form[key]}
+                  onChange={(e) => setForm({ ...form, [key]: e.target.value })}
+                />
+              ))}
+            </div>
+            <button
+              className="btn-secondary mt-3 w-full"
+              type="button"
+              disabled={createMut.isPending}
+              onClick={() => createMut.mutate()}
+            >
+              {createMut.isPending ? <Loader2 className="animate-spin" size={18} /> : "Tạo đơn mới"}
+            </button>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}

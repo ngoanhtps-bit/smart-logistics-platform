@@ -1,0 +1,177 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f6f8fb;
+  --foreground: #111827;
+  --card: #ffffff;
+  --card-border: #e4e7ec;
+  --navy: #102033;
+  --blue: #2563eb;
+  --cyan: #0891b2;
+  --orange: #f97316;
+  --green: #16a34a;
+  --muted: #667085;
+  --line: #e4e7ec;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+.dark {
+  --background: #0b1220;
+  --foreground: #e8edf5;
+  --card: #111a2e;
+  --card-border: #1e2d4a;
+  --navy: #e8edf5;
+  --line: #1e2d4a;
+}
+
+.dark .shell,
+.dark .soft-panel {
+  background: rgba(17, 26, 46, 0.95);
+  border-color: var(--card-border);
+}
+
+.dark .btn-ghost {
+  background: var(--card);
+  border-color: var(--card-border);
+  color: var(--foreground);
+}
+
+body {
+  margin: 0;
+  color: var(--foreground);
+  background: var(--background);
+  font-family: "Noto Sans", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  text-rendering: geometricPrecision;
+}
+
+h1,
+h2,
+.brand-type,
+.section-title {
+  font-family: "Noto Serif", "Noto Sans", ui-serif, Georgia, serif;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+.container {
+  width: min(1180px, calc(100% - 32px));
+  margin-inline: auto;
+}
+
+.shell {
+  border: 1px solid rgba(228, 231, 236, 0.95);
+  background: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 24px 70px rgba(16, 24, 40, 0.08);
+  backdrop-filter: blur(20px);
+}
+
+.section {
+  padding: 88px 0;
+}
+
+.section-title {
+  max-width: 760px;
+  font-size: clamp(2rem, 4.8vw, 3.45rem);
+  line-height: 1.12;
+  letter-spacing: 0;
+  color: var(--navy);
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.btn-primary,
+.btn-secondary,
+.btn-ghost {
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border-radius: 12px;
+  padding: 0 18px;
+  font-weight: 800;
+  transition: transform 180ms ease, box-shadow 180ms ease, background 180ms ease;
+}
+
+.btn-primary {
+  color: white;
+  background: linear-gradient(135deg, #f97316, #ea580c);
+  box-shadow: 0 14px 28px rgba(249, 115, 22, 0.24);
+}
+
+.btn-secondary {
+  color: white;
+  background: #102033;
+}
+
+.btn-ghost {
+  color: var(--navy);
+  border: 1px solid var(--line);
+  background: white;
+}
+
+.btn-primary:hover,
+.btn-secondary:hover,
+.btn-ghost:hover {
+  transform: translateY(-1px);
+}
+
+.grid-auto {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(255px, 1fr));
+  gap: 18px;
+}
+
+.map-grid {
+  background-image: linear-gradient(rgba(37, 99, 235, 0.08) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(37, 99, 235, 0.08) 1px, transparent 1px);
+  background-size: 34px 34px;
+}
+
+.soft-panel {
+  border: 1px solid var(--line);
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(16, 24, 40, 0.06);
+}
+
+.metric-chip {
+  border: 1px solid #dbeafe;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.leaflet-container {
+  z-index: 0;
+  font-family: inherit;
+}
+
+@media (max-width: 760px) {
+  .section {
+    padding: 56px 0;
+  }
+
+  .btn-primary,
+  .btn-secondary,
+  .btn-ghost {
+    width: 100%;
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "name": "smart-logistics-platform",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "typecheck": "tsc --noEmit",
+    "check:env": "node scripts/check-env.mjs",
+    "seed:auth-demo": "node --env-file=.env.local scripts/create-demo-auth-users.mjs",
+    "postinstall": "prisma generate",
+    "db:push": "prisma db push",
+    "db:seed": "tsx prisma/seed.ts"
+  },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
+  "dependencies": {
+    "@fontsource/be-vietnam-pro": "^5.2.8",
+    "@fontsource/noto-sans": "^5.2.10",
+    "@fontsource/noto-serif": "^5.2.9",
+    "@hookform/resolvers": "^5.4.0",
+    "@prisma/client": "^6.19.3",
+    "@supabase/ssr": "^0.10.3",
+    "@supabase/supabase-js": "^2.106.2",
+    "@tanstack/react-query": "^5.80.6",
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.15.0",
+    "leaflet": "^1.9.4",
+    "lucide-react": "^0.511.0",
+    "next": "^15.3.3",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-hook-form": "^7.76.1",
+    "react-leaflet": "^5.0.0",
+    "socket.io-client": "^4.8.3",
+    "zod": "^3.25.28",
+    "zustand": "^5.0.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.1.8",
+    "@types/leaflet": "^1.9.21",
+    "@types/node": "^22.15.24",
+    "@types/react": "^19.1.6",
+    "@types/react-dom": "^19.1.5",
+    "eslint": "^9.27.0",
+    "eslint-config-next": "^15.3.3",
+    "prisma": "^6.19.3",
+    "tailwindcss": "^4.1.8",
+    "tsx": "^4.22.3",
+    "typescript": "^5.8.3"
+  }
+}
