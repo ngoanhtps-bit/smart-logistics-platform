@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { Loader2 } from "lucide-react";
 import { useMemo } from "react";
+import { offerBadgeClass, offerStatusLabels } from "@/lib/dispatch/offer-status";
 import { useShipments } from "@/hooks/use-shipments";
 import type { ShipmentStatus } from "@/types/logistics";
 
@@ -15,7 +16,7 @@ const columns: { key: ShipmentStatus[]; stage: string; color: string }[] = [
 ];
 
 export function DispatchPipelineLive({ linkAssignToDispatcher = false }: { linkAssignToDispatcher?: boolean }) {
-  const { data: shipments, isLoading } = useShipments();
+  const { data: shipments, isLoading } = useShipments({ refetchInterval: 15_000 });
 
   const pipeline = useMemo(() => {
     const list = shipments ?? [];
@@ -54,6 +55,13 @@ export function DispatchPipelineLive({ linkAssignToDispatcher = false }: { linkA
                     {order.code}
                   </Link>
                   <span className="mt-1 block text-xs font-semibold text-slate-500">{order.route}</span>
+                  {order.offerStatus && order.offerStatus !== "none" ? (
+                    <span
+                      className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-black ${offerBadgeClass(order.offerStatus)}`}
+                    >
+                      {offerStatusLabels[order.offerStatus]}
+                    </span>
+                  ) : null}
                   {linkAssignToDispatcher ? (
                     <Link
                       href={`/dispatcher?assign=${encodeURIComponent(order.code)}`}

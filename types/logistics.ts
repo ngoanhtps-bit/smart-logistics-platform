@@ -94,6 +94,49 @@ export type RegisteredDriver = {
   vehicleType: string;
 };
 
+export type ShipmentEventType =
+  | "created"
+  | "offer_sent"
+  | "offer_cancelled"
+  | "driver_accepted"
+  | "driver_declined"
+  | "assigned"
+  | "status_changed"
+  | "note"
+  | "cancelled";
+
+export interface ShipmentOpsEvent {
+  id: string;
+  shipmentCode: string;
+  eventType: ShipmentEventType;
+  message: string;
+  actorUserId?: string;
+  actorRole?: string;
+  meta?: Record<string, unknown>;
+  createdAt: string;
+}
+
+export interface ShipmentOpsAlert {
+  level: "info" | "warning" | "error";
+  code: string;
+  message: string;
+  href?: string;
+}
+
+export interface ShipmentOpsOverview {
+  counts: {
+    total: number;
+    active: number;
+    waitingDriver: number;
+    needsAssign: number;
+    pendingOffer: number;
+    inTransit: number;
+    delivered: number;
+    declined: number;
+  };
+  alerts: ShipmentOpsAlert[];
+}
+
 export interface TrackingPoint {
   latitude: number;
   longitude: number;

@@ -1,4 +1,5 @@
 import { createAppNotification } from "@/lib/notifications/app-notifications";
+import { logShipmentEvent } from "@/lib/operations/shipment-events";
 import { statusLabels } from "@/lib/status-labels";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { supabaseGetDriverIdForUser } from "@/lib/supabase/data-access";
@@ -95,6 +96,70 @@ export async function listDriverTrips(userId: string) {
   return { pending, active, history, driverId };
 }
 
+export async function cancelTripOffer(code: string) {
+  const c = await client();
+  if (!c) throw new Error("Không kết nối Supabase");
+
+  const { data: row } = await c.from("shipments").select("offer_status").eq("code", code).maybeSingle();
+  if (!row) throw new Error("Không tìm thấy đơn");
+  if (row.offer_status !== "pending") throw new Error("Đơn không đang chờ tài xế chốt");
+
+  await c
+    .from("shipments")
+    .update({
+      offer_status: "none",
+      target_driver_id: null,
+      status: "quoted",
+      updated_at: new Date().toISOString()
+    })
+    .eq("code", code);
+
+  await logShipmentEvent({
+    shipmentCode: code,
+    eventType: "offer_cancelled",
+    message: "Điều phối hủy gửi chuyến — có thể gán lại"
+  });
+
+  return { ok: true };
+}
+
+export async function getDriverProfileForUser(userId: string) {
+  const c = await client();
+  if (!c) return null;
+
+  const driverId = await getDriverIdForUser(userId);
+  if (!driverId) return null;
+
+  const { data: driver } = await c.from("drivers").select("vehicle_id, license_number").eq("id", driverId).maybeSingle();
+  const { data: user } = await c.from("users").select("name, phone").eq("id", userId).maybeSingle();
+
+  let plate = "";
+  let vehicleType = "";
+  if (driver?.vehicle_id) {
+    const { data: v } = await c.from("vehicles").select("plate_number, type").eq("id", driver.vehicle_id).maybeSingle();
+    plate = (v?.plate_number as string) ?? "";
+    vehicleType = (v?.type as string) ?? "";
+  }
+
+  return {
+    driverId,
+    name: (user?.name as string) ?? "",
+    phone: (user?.phone as string) ?? "",
+    plate,
+    vehicleType,
+    licenseNumber: (driver?.license_number as string) ?? ""
+  };
+}
+
+export async function driverCanUpdateShipment(userId: string, code: string) {
+  const c = await client();
+  if (!c) return false;
+  const driverId = await getDriverIdForUser(userId);
+  if (!driverId) return false;
+  const { data } = await c.from("shipments").select("driver_id, offer_status").eq("code", code).maybeSingle();
+  return Boolean(data?.driver_id === driverId && data.offer_status === "accepted");
+}
+
 export async function notifyAllDriversNewShipment(code: string, route: string) {
   const c = await client();
   if (!c) return;
@@ -153,6 +218,13 @@ export async function offerTripToDriver(input: {
   if (error) throw new Error(error.message);
 
   const route = `${data.pickup_location} → ${data.delivery_location}`;
+  await logShipmentEvent({
+    shipmentCode: input.code,
+    eventType: "offer_sent",
+    message: `Gửi chốt app — xe gợi ý ${input.vehiclePlate ?? "—"}`,
+    meta: { targetDriverUserId: input.targetDriverUserId }
+  });
+
   await createAppNotification({
     userId: input.targetDriverUserId,
     title: `Cần chốt chuyến ${input.code}`,
@@ -201,6 +273,13 @@ export async function driverRespondTrip(
       })
       .eq("code", code);
 
+    await logShipmentEvent({
+      shipmentCode: code,
+      eventType: "driver_declined",
+      message: `Tài xế từ chối · ${route}`,
+      actorUserId: userId,
+      actorRole: "driver"
+    });
     await notifyDispatchers(
       `Tài xế từ chối ${code}`,
       `${route}. Điều phối gán tài xế khác.`
@@ -243,6 +322,14 @@ export async function driverRespondTrip(
     })
     .eq("code", code);
 
+  await logShipmentEvent({
+    shipmentCode: code,
+    eventType: "driver_accepted",
+    message: `${user?.name ?? "Tài xế"} chốt · BSX ${plate ?? "—"} · ${phone || "—"}`,
+    actorUserId: userId,
+    actorRole: "driver",
+    meta: { plate, phone }
+  });
   await notifyDispatchers(
     `Tài xế đã chốt ${code}`,
     `${user?.name ?? "Tài xế"} · ${plate ?? "—"} · ${phone || "—"} · ${route}`

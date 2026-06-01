@@ -12,7 +12,8 @@ import {
   ThumbsUp,
   Truck
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { mapsDirectionsUrl } from "@/lib/maps/navigation";
 import { PodUpload } from "@/components/pod-upload";
 import { api } from "@/lib/api/client";
 import type { DriverTripOffer, ShipmentStatus } from "@/types/logistics";
@@ -48,7 +49,16 @@ export function DriverDashboard() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["driver-trips"],
     queryFn: fetchTrips,
-    refetchInterval: 25_000
+    refetchInterval: 15_000
+  });
+
+  const { data: profileData } = useQuery({
+    queryKey: ["driver-profile"],
+    queryFn: async () => {
+      const res = await fetch("/api/driver/profile", { credentials: "include" });
+      const json = await res.json();
+      return json.profile as { plate?: string; phone?: string; name?: string } | null;
+    }
   });
 
   const { data: notifications } = useQuery({
@@ -93,6 +103,15 @@ export function DriverDashboard() {
   const active = data?.active?.[0];
   const pendingList = data?.pending ?? [];
 
+  useEffect(() => {
+    if (!profileData) return;
+    setAcceptForm((f) => ({
+      plate: f.plate || profileData.plate || "",
+      phone: f.phone || profileData.phone || "",
+      note: f.note
+    }));
+  }, [profileData?.plate, profileData?.phone]);
+
   const statusMut = useMutation({
     mutationFn: (status: ShipmentStatus) => api.patchShipment(active!.code, { status }),
     onSuccess: () => {
@@ -109,6 +128,7 @@ export function DriverDashboard() {
       });
       const res = await fetch(`/api/tracking/${active.code}/gps`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           latitude: pos.coords.latitude,
@@ -265,7 +285,11 @@ export function DriverDashboard() {
                     className="btn-primary mt-4 w-full"
                     onClick={() => {
                       setSelectedPending(trip.code);
-                      setAcceptForm({ plate: "", phone: "", note: "" });
+                      setAcceptForm({
+                        plate: profileData?.plate ?? "",
+                        phone: profileData?.phone ?? "",
+                        note: ""
+                      });
                     }}
                   >
                     <Truck size={18} /> Chốt chuyến này
@@ -319,16 +343,29 @@ export function DriverDashboard() {
               <PodUpload shipmentCode={active.code} />
 
               <div className="grid gap-3 sm:grid-cols-2">
-                <button className="btn-primary" type="button" disabled={!active}>
-                  <Navigation size={18} /> GPS Navigation
-                </button>
+                <a
+                  className="btn-primary inline-flex items-center justify-center gap-2"
+                  href={mapsDirectionsUrl(active.delivery)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Navigation size={18} /> Chỉ đường điểm giao
+                </a>
+                <a
+                  className="btn-secondary inline-flex items-center justify-center gap-2"
+                  href={mapsDirectionsUrl(active.pickup)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <MapPinned size={18} /> Điểm lấy hàng
+                </a>
                 <button
-                  className="btn-ghost"
+                  className="btn-ghost sm:col-span-2"
                   type="button"
                   disabled={gpsMut.isPending}
                   onClick={() => gpsMut.mutate()}
                 >
-                  <MapPinned size={18} /> Gửi vị trí
+                  <MapPinned size={18} /> Gửi vị trí GPS
                 </button>
               </div>
               {gpsMsg ? <p className="text-center text-sm font-semibold text-slate-600">{gpsMsg}</p> : null}

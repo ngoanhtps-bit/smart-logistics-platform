@@ -1,11 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { requireApiRoles } from "@/lib/auth/api-guard";
+import { driverRoles, requireApiRoles } from "@/lib/auth/api-guard";
 import { driverRespondTrip } from "@/lib/driver/trips";
 
 type Props = { params: Promise<{ code: string }> };
 
 export async function POST(request: NextRequest, { params }: Props) {
-  const { user, error } = await requireApiRoles(["driver"]);
+  const { user, error } = await requireApiRoles(driverRoles);
   if (error) return error;
   if (!user) return NextResponse.json({ message: "Unauthorized" }, { status: 401 });
 

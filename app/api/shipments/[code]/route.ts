@@ -23,17 +23,22 @@ export async function PATCH(request: Request, { params }: Props) {
 
   const isStatusOnly = body.status && !body.driverName && !body.vehiclePlate;
   const guard = isStatusOnly
-    ? await requireApiRoles(driverRoles)
+    ? await requireApiRoles([...dispatcherRoles, ...driverRoles])
     : await requireApiRoles(dispatcherRoles);
   if (guard.error) return guard.error;
 
-  const shipment = await patchShipment(code, {
-    status: body.status as ShipmentStatus | undefined,
-    driverName: body.driverName,
-    driverPhone: body.driverPhone,
-    vehiclePlate: body.vehiclePlate,
-    vehicleType: body.vehicleType
-  });
+  let shipment;
+  try {
+    shipment = await patchShipment(code, {
+      status: body.status as ShipmentStatus | undefined,
+      driverName: body.driverName,
+      driverPhone: body.driverPhone,
+      vehiclePlate: body.vehiclePlate,
+      vehicleType: body.vehicleType
+    });
+  } catch (e) {
+    return NextResponse.json({ message: (e as Error).message }, { status: 409 });
+  }
   if (!shipment) {
     return NextResponse.json({ message: "Không tìm thấy vận đơn" }, { status: 404 });
   }

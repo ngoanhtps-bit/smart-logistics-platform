@@ -8,10 +8,11 @@ import { AdminPricingTab } from "@/components/admin-pricing-tab";
 import { AdminRoutesTab } from "@/components/admin-routes-tab";
 import { AdminUsersTab } from "@/components/admin-users-tab";
 import { AdminVehiclesTab } from "@/components/admin-vehicles-tab";
+import { AdminOperationsTab } from "@/components/admin-operations-tab";
 import { AdminProductionPanel } from "@/components/admin-production-panel";
 import { SupabaseLivePanel } from "@/components/supabase-live-panel";
 
-type Tab = "routes" | "vehicles" | "pricing" | "blog" | "users" | "system";
+type Tab = "routes" | "vehicles" | "pricing" | "blog" | "users" | "operations" | "system";
 
 export function AdminCmsPanel() {
   const [tab, setTab] = useState<Tab>("routes");
@@ -23,6 +24,7 @@ export function AdminCmsPanel() {
     { id: "pricing", label: "Bảng giá" },
     { id: "blog", label: "Tin tức" },
     { id: "users", label: "Người dùng" },
+    { id: "operations", label: "Vận hành" },
     { id: "system", label: "Hệ thống" }
   ];
 
@@ -70,6 +72,8 @@ export function AdminCmsPanel() {
 
       {tab === "users" ? <AdminUsersTab globalSearch={quickSearch} /> : null}
 
+      {tab === "operations" ? <AdminOperationsTab /> : null}
+
       {tab === "system" ? (
         <div className="grid gap-6">
           <AdminProductionPanel />
@@ -79,7 +83,7 @@ export function AdminCmsPanel() {
             <ul className="mt-4 grid gap-1 font-mono text-xs text-slate-600">
               <li>010_operational_tables.sql · 011_operational_rls.sql</li>
               <li>012_invoices.sql · 013_storage_documents.sql</li>
-              <li>014–018 CMS · 019_driver_trip_offers.sql (chốt chuyến tài xế)</li>
+              <li>014–018 CMS · 019 (chốt chuyến) · <strong>020_shipment_events.sql</strong> (nhật ký điều khiển)</li>
             </ul>
           </section>
         </div>

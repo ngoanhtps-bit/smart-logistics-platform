@@ -2,8 +2,10 @@ import { isDeletableShipmentStatus } from "@/lib/shipments/deletable-status";
 import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseConfig } from "@/lib/supabase/config";
+import { logShipmentEvent } from "@/lib/operations/shipment-events";
 import { statusLabels } from "@/lib/status-labels";
 import type {
+  DriverOfferStatus,
   FleetVehicle,
   QuoteRequest,
   QuoteResponse,
@@ -25,6 +27,12 @@ type DbShipment = {
   created_at: string;
   driver_id?: string | null;
   vehicle_id?: string | null;
+  offer_status?: string | null;
+  target_driver_id?: string | null;
+  driver_confirmed_at?: string | null;
+  driver_report_plate?: string | null;
+  driver_report_phone?: string | null;
+  driver_note?: string | null;
 };
 
 async function getClient() {
@@ -38,34 +46,57 @@ export function isSupabaseDataEnabled() {
   return getSupabaseConfig().enabled;
 }
 
-function mapShipment(row: DbShipment, driverName = "Chưa gán", driverPhone = "", plate = "—"): Shipment {
+function mapShipment(
+  row: DbShipment,
+  driverName = "Chưa gán",
+  driverPhone = "",
+  plate = "—",
+  targetDriverName?: string
+): Shipment {
   const status = row.status as ShipmentStatus;
+  const offerStatus = (row.offer_status as DriverOfferStatus) || "none";
+  const displayDriver =
+    offerStatus === "pending" && targetDriverName
+      ? `${targetDriverName} (chờ chốt)`
+      : driverName;
+  const displayPlate =
+    row.driver_report_plate && offerStatus === "accepted" ? row.driver_report_plate : plate;
+
   return {
     code: row.code,
     route: `${row.pickup_location} → ${row.delivery_location}`,
     pickup: row.pickup_location,
     delivery: row.delivery_location,
-    driver: driverName,
-    driverPhone,
-    vehiclePlate: plate,
+    driver: displayDriver,
+    driverPhone: row.driver_report_phone || driverPhone,
+    vehiclePlate: displayPlate,
     vehicleType: row.vehicle_type ?? "—",
     status,
     statusLabel: statusLabels[status] ?? row.status,
     eta: row.eta ? new Date(row.eta).toLocaleString("vi-VN") : "Đang cập nhật",
     cargoType: row.cargo_type,
     weight: row.weight ?? "",
-    createdAt: row.created_at
+    createdAt: row.created_at,
+    offerStatus,
+    targetDriverId: row.target_driver_id ?? null,
+    driverConfirmedAt: row.driver_confirmed_at ?? undefined,
+    driverReportPlate: row.driver_report_plate ?? undefined,
+    driverReportPhone: row.driver_report_phone ?? undefined,
+    driverNote: row.driver_note ?? undefined
   };
 }
 
 async function loadDriverVehicleMaps(rows: DbShipment[]) {
   const client = await getClient();
   const driverNames = new Map<string, { name: string; phone: string }>();
+  const targetDriverNames = new Map<string, string>();
   const vehiclePlates = new Map<string, string>();
 
-  if (!client) return { driverNames, vehiclePlates };
+  if (!client) return { driverNames, vehiclePlates, targetDriverNames };
 
-  const driverIds = [...new Set(rows.map((r) => r.driver_id).filter(Boolean))] as string[];
+  const driverIds = [
+    ...new Set([...rows.map((r) => r.driver_id), ...rows.map((r) => r.target_driver_id)].filter(Boolean))
+  ] as string[];
   const vehicleIds = [...new Set(rows.map((r) => r.vehicle_id).filter(Boolean))] as string[];
 
   if (driverIds.length > 0) {
@@ -79,7 +110,11 @@ async function loadDriverVehicleMaps(rows: DbShipment[]) {
       const userById = new Map((users ?? []).map((u) => [u.id as string, u]));
       for (const d of drivers ?? []) {
         const u = userById.get(d.user_id as string);
-        if (u) driverNames.set(d.id as string, { name: u.name as string, phone: (u.phone as string) ?? "" });
+        if (u) {
+          const info = { name: u.name as string, phone: (u.phone as string) ?? "" };
+          driverNames.set(d.id as string, info);
+          targetDriverNames.set(d.id as string, info.name);
+        }
       }
     }
   }
@@ -91,15 +126,16 @@ async function loadDriverVehicleMaps(rows: DbShipment[]) {
     }
   }
 
-  return { driverNames, vehiclePlates };
+  return { driverNames, vehiclePlates, targetDriverNames };
 }
 
 async function enrichRows(rows: DbShipment[]): Promise<Shipment[]> {
-  const { driverNames, vehiclePlates } = await loadDriverVehicleMaps(rows);
+  const { driverNames, vehiclePlates, targetDriverNames } = await loadDriverVehicleMaps(rows);
   return rows.map((row) => {
     const driver = row.driver_id ? driverNames.get(row.driver_id) : undefined;
     const plate = row.vehicle_id ? vehiclePlates.get(row.vehicle_id) : undefined;
-    return mapShipment(row, driver?.name, driver?.phone, plate);
+    const targetName = row.target_driver_id ? targetDriverNames.get(row.target_driver_id) : undefined;
+    return mapShipment(row, driver?.name, driver?.phone, plate, targetName);
   });
 }
 
@@ -197,7 +233,13 @@ export async function supabaseCreateShipment(
     .single();
 
   if (error || !data) return null;
-  return mapShipment(data as DbShipment);
+  const shipment = mapShipment(data as DbShipment);
+  await logShipmentEvent({
+    shipmentCode: code,
+    eventType: "created",
+    message: `${input.pickup} → ${input.delivery} · ${input.cargoType}`
+  });
+  return shipment;
 }
 
 async function resolveVehicleId(
@@ -275,6 +317,17 @@ export async function supabasePatchShipment(
   const client = await getClient();
   if (!client) return null;
 
+  if (input.driverName) {
+    const { data: existing } = await client
+      .from("shipments")
+      .select("offer_status")
+      .eq("code", code)
+      .maybeSingle();
+    if (existing?.offer_status === "pending") {
+      throw new Error("Đơn đang chờ tài xế chốt trên app — hủy gửi chuyến hoặc đợi tài xế phản hồi.");
+    }
+  }
+
   let vehicleId: string | undefined;
   let driverId: string | undefined;
 
@@ -285,21 +338,37 @@ export async function supabasePatchShipment(
     driverId = await resolveDriverId(client, input.driverName, input.driverPhone, vehicleId);
   }
 
-  const { data, error } = await client
-    .from("shipments")
-    .update({
-      status: input.status,
-      vehicle_type: input.vehicleType,
-      driver_id: driverId,
-      vehicle_id: vehicleId,
-      updated_at: new Date().toISOString()
-    })
-    .eq("code", code)
-    .select()
-    .single();
+  const patch: Record<string, unknown> = {
+    status: input.status,
+    vehicle_type: input.vehicleType,
+    driver_id: driverId,
+    vehicle_id: vehicleId,
+    updated_at: new Date().toISOString()
+  };
+  if (input.driverName) {
+    patch.offer_status = "none";
+    patch.target_driver_id = null;
+  }
+
+  const { data, error } = await client.from("shipments").update(patch).eq("code", code).select().single();
 
   if (error || !data) return null;
   const [shipment] = await enrichRows([data as DbShipment]);
+  if (shipment) {
+    if (input.driverName) {
+      await logShipmentEvent({
+        shipmentCode: code,
+        eventType: "assigned",
+        message: `Gán trực tiếp · ${input.driverName} · ${input.vehiclePlate ?? "—"}`
+      });
+    } else if (input.status) {
+      await logShipmentEvent({
+        shipmentCode: code,
+        eventType: input.status === "cancelled" ? "cancelled" : "status_changed",
+        message: `Trạng thái → ${statusLabels[input.status] ?? input.status}`
+      });
+    }
+  }
   return shipment ?? null;
 }
 

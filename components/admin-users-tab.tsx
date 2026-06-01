@@ -67,6 +67,7 @@ export function AdminUsersTab({ globalSearch = "" }: { globalSearch?: string }) 
   const [msgOk, setMsgOk] = useState(true);
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState<"all" | UserRole>("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "pending">("all");
 
 
 
@@ -207,10 +208,11 @@ export function AdminUsersTab({ globalSearch = "" }: { globalSearch?: string }) 
   const filteredUsers = useMemo(() => {
     const list = data?.users ?? [];
     return list.filter((u) => {
+      if (statusFilter === "pending" && u.accountStatus !== "pending") return false;
       if (roleFilter !== "all" && u.role !== roleFilter) return false;
       return matchesSearch(combinedSearch, [u.name, u.email, u.phone, u.role, roleLabelsVi[u.role]]);
     });
-  }, [data?.users, combinedSearch, roleFilter]);
+  }, [data?.users, combinedSearch, roleFilter, statusFilter]);
 
   const bulk = useBulkSelect(filteredUsers);
 
@@ -535,17 +537,30 @@ export function AdminUsersTab({ globalSearch = "" }: { globalSearch?: string }) 
         deleteLabel="Xóa người dùng đã chọn"
         deleting={deleteMut.isPending}
         extra={
-          <select
-            className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value as "all" | UserRole)}
-          >
-            <option value="all">Tất cả vai trò</option>
-            <option value="customer">Khách hàng</option>
-            <option value="dispatcher">Điều phối</option>
-            <option value="driver">Tài xế</option>
-            <option value="admin">Quản trị</option>
-          </select>
+          <div className="flex flex-wrap gap-2">
+            {(data?.pendingCount ?? 0) > 0 ? (
+              <button
+                type="button"
+                className={`rounded-xl px-3 py-2 text-sm font-black ${
+                  statusFilter === "pending" ? "bg-amber-500 text-white" : "bg-amber-100 text-amber-900"
+                }`}
+                onClick={() => setStatusFilter(statusFilter === "pending" ? "all" : "pending")}
+              >
+                Chờ duyệt ({data?.pendingCount})
+              </button>
+            ) : null}
+            <select
+              className="rounded-xl border border-slate-200 px-3 py-2 text-sm font-bold"
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value as "all" | UserRole)}
+            >
+              <option value="all">Tất cả vai trò</option>
+              <option value="customer">Khách hàng</option>
+              <option value="dispatcher">Điều phối</option>
+              <option value="driver">Tài xế</option>
+              <option value="admin">Quản trị</option>
+            </select>
+          </div>
         }
       />
 

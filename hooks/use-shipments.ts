@@ -3,11 +3,12 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "@/lib/api/client";
 
-export function useShipments(opts?: { mine?: boolean }) {
+export function useShipments(opts?: { mine?: boolean; refetchInterval?: number }) {
   const scope = opts?.mine ? "mine" : "all";
   return useQuery({
     queryKey: ["shipments", scope],
-    queryFn: () => api.getShipments(opts?.mine ? { scope: "mine" } : undefined)
+    queryFn: () => api.getShipments(opts?.mine ? { scope: "mine" } : undefined),
+    refetchInterval: opts?.refetchInterval
   });
 }
 

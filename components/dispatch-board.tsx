@@ -11,15 +11,17 @@ import { DispatchPipelineLive } from "@/components/dispatch-pipeline-live";
 import { DispatcherInvoices } from "@/components/dispatcher-invoices";
 import { FleetLive } from "@/components/fleet-live";
 import { DashboardKpisLive } from "@/components/dashboard-kpis-live";
+import { OperationsControlCenter } from "@/components/operations-control-center";
 
-type BoardTab = "assign" | "fleet" | "pipeline" | "map" | "more";
+type BoardTab = "control" | "assign" | "fleet" | "pipeline" | "map" | "more";
 
 function DispatchBoardInner() {
   const searchParams = useSearchParams();
   const assignFromUrl = searchParams.get("assign");
-  const [tab, setTab] = useState<BoardTab>(assignFromUrl ? "assign" : "assign");
+  const [tab, setTab] = useState<BoardTab>(assignFromUrl ? "assign" : "control");
 
   const tabs: { id: BoardTab; label: string }[] = [
+    { id: "control", label: "Điều khiển" },
     { id: "assign", label: "Gán xe & đơn" },
     { id: "fleet", label: "Đội xe" },
     { id: "pipeline", label: "Luồng đơn" },
@@ -45,6 +47,8 @@ function DispatchBoardInner() {
           ))}
         </div>
       </div>
+
+      {tab === "control" ? <OperationsControlCenter /> : null}
 
       {tab === "assign" ? <DispatchCommandCenter initialAssignCode={assignFromUrl} /> : null}
 

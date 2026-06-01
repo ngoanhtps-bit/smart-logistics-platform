@@ -2,9 +2,27 @@ import { NextResponse } from "next/server";
 import { getProductionReadiness } from "@/lib/production/readiness";
 import { getSupabaseConfig } from "@/lib/supabase/config";
 import { supabaseListShipments } from "@/lib/supabase/data-access";
+import {
+  checkDriverTripOffersMigration,
+  checkShipmentEventsMigration
+} from "@/lib/supabase/check-migrations";
 
 export async function GET() {
   const { ready, checks, siteUrl } = getProductionReadiness();
+  const driverOffers = await checkDriverTripOffersMigration();
+  checks.push({
+    id: "driver_trip_offers",
+    label: "SQL 019 — Chốt chuyến tài xế",
+    ok: driverOffers.ok,
+    detail: driverOffers.detail
+  });
+  const shipmentEvents = await checkShipmentEventsMigration();
+  checks.push({
+    id: "shipment_events",
+    label: "SQL 020 — Nhật ký điều khiển",
+    ok: shipmentEvents.ok,
+    detail: shipmentEvents.detail
+  });
   const supabase = getSupabaseConfig();
 
   let dbOk = false;
