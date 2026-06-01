@@ -83,7 +83,7 @@ export function AdminCmsPanel() {
             <ul className="mt-4 grid gap-1 font-mono text-xs text-slate-600">
               <li>010_operational_tables.sql · 011_operational_rls.sql</li>
               <li>012_invoices.sql · 013_storage_documents.sql</li>
-              <li>014–018 CMS · 019 (chốt chuyến) · <strong>020_shipment_events.sql</strong> (nhật ký điều khiển)</li>
+              <li>019 chốt chuyến · 020 nhật ký · <strong>021_realtime_sync_tables.sql</strong> (Realtime đồng bộ 4 vai trò)</li>
             </ul>
           </section>
         </div>

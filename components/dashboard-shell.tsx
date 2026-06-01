@@ -2,6 +2,8 @@ import Link from "next/link";
 import { DashboardNav, DashboardSidebarExtras } from "@/components/dashboard-nav";
 import { DashboardUserMenu } from "@/components/dashboard-user-menu";
 import { NotificationsPanel } from "@/components/notifications-panel";
+import { CrossRoleSyncBanner } from "@/components/cross-role-sync-banner";
+import { SyncStatusBadge } from "@/components/sync-status-badge";
 
 export function DashboardShell({ children, title }: { children: React.ReactNode; title: string }) {
   return (
@@ -19,12 +21,16 @@ export function DashboardShell({ children, title }: { children: React.ReactNode;
               <h1 className="text-2xl font-black text-[#0b1f3a]">{title}</h1>
             </div>
             <div className="flex items-center gap-3">
+              <SyncStatusBadge />
               <NotificationsPanel />
               <DashboardUserMenu />
             </div>
           </div>
         </header>
-        <main className="p-4 md:p-8">{children}</main>
+        <main className="p-4 md:p-8">
+          <CrossRoleSyncBanner />
+          {children}
+        </main>
       </div>
     </div>
   );

@@ -4,12 +4,14 @@ import { CheckCircle2, Clock3, Loader2, Truck } from "lucide-react";
 import { LogisticsMap } from "@/components/logistics-map";
 import { PodUpload } from "@/components/pod-upload";
 import { ShipmentJourneyPanel } from "@/components/shipment-journey-panel";
+import { useLogisticsRealtimeSync } from "@/hooks/use-logistics-realtime-sync";
 import { useSocketTracking } from "@/hooks/use-socket-tracking";
 import { useTrackingStream } from "@/hooks/use-tracking-stream";
 import { useTracking } from "@/hooks/use-shipments";
 
 export function TrackingLive({ code }: { code: string }) {
-  const { data, isLoading, isError, dataUpdatedAt } = useTracking(code);
+  useLogisticsRealtimeSync(true);
+  const { data, isLoading, isError, dataUpdatedAt } = useTracking(code, 12_000);
   const { data: stream, connected } = useTrackingStream(code, !isLoading && !isError);
   const { data: socketData, connected: socketConnected, enabled: socketEnabled } = useSocketTracking(
     code,

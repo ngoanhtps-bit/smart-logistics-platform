@@ -20,7 +20,7 @@ export function useShipment(code: string) {
   });
 }
 
-export function useTracking(code: string, refetchInterval = 20_000) {
+export function useTracking(code: string, refetchInterval = 15_000) {
   return useQuery({
     queryKey: ["tracking", code],
     queryFn: () => api.getTracking(code),

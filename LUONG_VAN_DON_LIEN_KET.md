@@ -29,6 +29,9 @@ Mọi thông báo có `shipment_code` → bấm vào mở `/tracking/...` và re
 
 `GET /api/shipments/[code]/journey` — shipment + steps + events + nextActions
 
-## Đồng bộ cache
+## Đồng bộ cache & Realtime
 
-Sau mỗi thao tác: `invalidateShipmentFlow()` cập nhật shipments, tracking, journey, ops, notifications, driver-trips.
+- Sau mỗi thao tác: `invalidateShipmentFlow()` + broadcast tab khác (cùng trình duyệt).
+- **Supabase Realtime:** `shipments`, `shipment_events`, `app_notifications` (SQL 005 + 021).
+- Header dashboard: badge **「Đồng bộ live」**.
+- Admin → Vận hành → **Kiểm tra đồng bộ 4 vai trò** (`/api/sync/verify`).

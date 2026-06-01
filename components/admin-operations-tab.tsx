@@ -1,6 +1,7 @@
 "use client";
 
 import { OperationsControlCenter } from "@/components/operations-control-center";
+import { RoleSyncCheckPanel } from "@/components/role-sync-check-panel";
 
 /** Admin xem toàn bộ vận hành — cùng trung tâm điều khiển với điều phối */
 export function AdminOperationsTab() {
@@ -10,6 +11,7 @@ export function AdminOperationsTab() {
         <strong>Quyền admin:</strong> xem và điều khiển mọi vận đơn, nhật ký sự kiện, đổi trạng thái. Gán tài xế chi
         tiết tại tab Điều phối hoặc link «Gán xe» trong bảng điều khiển.
       </div>
+      <RoleSyncCheckPanel />
       <OperationsControlCenter />
     </div>
   );
