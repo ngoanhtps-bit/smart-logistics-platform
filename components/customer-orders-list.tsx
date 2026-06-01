@@ -8,6 +8,10 @@ import { ListToolbar, RowCheckbox } from "@/components/list-toolbar";
 import { useBulkSelect } from "@/hooks/use-bulk-select";
 import { useShipments } from "@/hooks/use-shipments";
 import { matchesSearch } from "@/lib/list-search";
+import { offerBadgeClass, offerStatusLabels } from "@/lib/dispatch/offer-status";
+import { isUnassignedDriver } from "@/lib/dispatch/shipment-assign";
+import { invalidateShipmentFlow } from "@/lib/query/invalidate-shipments";
+import { journeyStatusMessage, shipmentProgressPercent } from "@/lib/shipment/workflow";
 import { isDeletableShipmentStatus } from "@/lib/shipments/deletable-status";
 
 export function CustomerOrdersList() {
@@ -40,7 +44,7 @@ export function CustomerOrdersList() {
     onSuccess: (data: { message?: string }) => {
       setMsg(data.message ?? "Đã xóa đơn.");
       bulk.clear();
-      qc.invalidateQueries({ queryKey: ["shipments"] });
+      invalidateShipmentFlow(qc);
     },
     onError: (e) => setMsg((e as Error).message)
   });
@@ -79,23 +83,56 @@ export function CustomerOrdersList() {
             Chưa có đơn — dùng form «Tạo vận đơn» phía trên hoặc báo giá trang chủ.
           </p>
         ) : null}
-        {rows.map(({ id, shipment: s }) => (
-          <div
-            key={id}
-            className="grid gap-2 rounded-2xl border border-slate-100 p-4 md:grid-cols-[auto_1fr_auto_auto_auto] md:items-center"
-          >
-            <RowCheckbox checked={bulk.isSelected(id)} onChange={() => bulk.toggle(id)} />
-            <Link href={`/tracking/${s.code}`} className="font-black text-[#0b1f3a] hover:text-[#2563eb]">
-              {s.code}
-            </Link>
-            <p className="font-semibold text-slate-600">{s.route}</p>
-            <p className="font-semibold text-slate-600">{s.statusLabel}</p>
-            <p className="font-black text-[#174ea6]">{s.eta}</p>
-            {!isDeletableShipmentStatus(s.status) ? (
-              <p className="text-xs text-slate-400 md:col-span-5">Đơn đang xử lý — không xóa được</p>
-            ) : null}
-          </div>
-        ))}
+        {rows.map(({ id, shipment: s }) => {
+          const progress = shipmentProgressPercent(s);
+          return (
+            <div
+              key={id}
+              className="rounded-2xl border border-slate-100 p-4"
+            >
+              <div className="grid gap-2 md:grid-cols-[auto_1fr_auto] md:items-center">
+                <RowCheckbox checked={bulk.isSelected(id)} onChange={() => bulk.toggle(id)} />
+                <div>
+                  <Link href={`/tracking/${s.code}`} className="font-black text-[#0b1f3a] hover:text-[#2563eb]">
+                    {s.code}
+                  </Link>
+                  <p className="font-semibold text-slate-600">{s.route}</p>
+                  <p className="mt-1 text-xs font-bold text-slate-500">{journeyStatusMessage(s)}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-semibold text-slate-600">{s.statusLabel}</p>
+                  <p className="font-black text-[#174ea6]">{s.eta}</p>
+                  {s.offerStatus && s.offerStatus !== "none" ? (
+                    <span
+                      className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-black ${offerBadgeClass(s.offerStatus)}`}
+                    >
+                      {offerStatusLabels[s.offerStatus]}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-[#2563eb] transition-all"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <div className="mt-2 flex flex-wrap gap-2 text-xs">
+                <Link href={`/tracking/${s.code}`} className="font-bold text-[#2563eb]">
+                  Theo dõi hành trình →
+                </Link>
+                {!isUnassignedDriver(s.driver) ? (
+                  <span className="text-slate-500">
+                    {s.driver} · {s.vehiclePlate}
+                  </span>
+                ) : null}
+              </div>
+              {!isDeletableShipmentStatus(s.status) ? (
+                <p className="mt-2 text-xs text-slate-400">Đơn đang xử lý — không xóa được</p>
+              ) : null}
+            </div>
+          );
+        })}
       </div>
     </>
   );

@@ -17,6 +17,8 @@ import { useMemo, useState } from "react";
 import { offerBadgeClass, offerStatusLabels } from "@/lib/dispatch/offer-status";
 import { eventTypeLabels } from "@/lib/operations/shipment-events";
 import { matchesSearch } from "@/lib/list-search";
+import { ShipmentJourneyPanel } from "@/components/shipment-journey-panel";
+import { invalidateShipmentFlow } from "@/lib/query/invalidate-shipments";
 import type { Shipment, ShipmentOpsEvent, ShipmentStatus } from "@/types/logistics";
 
 type OpsPayload = {
@@ -110,8 +112,7 @@ export function OperationsControlCenter() {
     },
     onSuccess: () => {
       setMsg("Đã cập nhật trạng thái.");
-      qc.invalidateQueries({ queryKey: ["operations-overview"] });
-      qc.invalidateQueries({ queryKey: ["shipments"] });
+      invalidateShipmentFlow(qc, selected?.code);
     },
     onError: (e) => setMsg((e as Error).message)
   });
@@ -131,7 +132,7 @@ export function OperationsControlCenter() {
     onSuccess: () => {
       setNote("");
       setMsg("Đã ghi nhật ký điều khiển.");
-      qc.invalidateQueries({ queryKey: ["operations-overview"] });
+      invalidateShipmentFlow(qc, selected?.code);
     },
     onError: (e) => setMsg((e as Error).message)
   });
@@ -384,6 +385,9 @@ export function OperationsControlCenter() {
                   </div>
                 </div>
                 {msg ? <p className="mt-3 text-xs font-bold text-slate-600">{msg}</p> : null}
+                <div className="mt-4 border-t border-slate-100 pt-4">
+                  <ShipmentJourneyPanel code={selected.code} compact />
+                </div>
               </>
             )}
           </section>

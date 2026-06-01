@@ -11,6 +11,7 @@ export type AppNotification = {
   type: "info" | "warning" | "success";
   read: boolean;
   createdAt: string;
+  shipmentCode?: string;
 };
 
 let notifications: AppNotification[] = [

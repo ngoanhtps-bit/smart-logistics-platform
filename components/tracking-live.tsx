@@ -3,6 +3,7 @@
 import { CheckCircle2, Clock3, Loader2, Truck } from "lucide-react";
 import { LogisticsMap } from "@/components/logistics-map";
 import { PodUpload } from "@/components/pod-upload";
+import { ShipmentJourneyPanel } from "@/components/shipment-journey-panel";
 import { useSocketTracking } from "@/hooks/use-socket-tracking";
 import { useTrackingStream } from "@/hooks/use-tracking-stream";
 import { useTracking } from "@/hooks/use-shipments";
@@ -38,6 +39,9 @@ export function TrackingLive({ code }: { code: string }) {
 
   return (
     <section className="section bg-white">
+      <div className="container mb-8">
+        <ShipmentJourneyPanel code={code} />
+      </div>
       <div className="container grid gap-8 lg:grid-cols-[1.1fr_0.9fr]">
         <div>
           <LogisticsMap shipmentCode={shipment.code} speed={speed} updatedSec={updatedSec} />

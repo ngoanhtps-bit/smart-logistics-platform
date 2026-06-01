@@ -51,6 +51,7 @@ export function DispatchPipelineLive({ linkAssignToDispatcher = false }: { linkA
                   <Link
                     href={`/tracking/${order.code}`}
                     className="text-sm font-bold text-slate-700 hover:text-[#2563eb]"
+                    title="Xem hành trình & GPS"
                   >
                     {order.code}
                   </Link>
@@ -63,12 +64,20 @@ export function DispatchPipelineLive({ linkAssignToDispatcher = false }: { linkA
                     </span>
                   ) : null}
                   {linkAssignToDispatcher ? (
-                    <Link
-                      href={`/dispatcher?assign=${encodeURIComponent(order.code)}`}
-                      className="mt-2 inline-block rounded-lg bg-orange-100 px-2 py-1 text-xs font-black text-orange-800"
-                    >
-                      Gán xe →
-                    </Link>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      <Link
+                        href={`/tracking/${order.code}`}
+                        className="rounded-lg bg-blue-100 px-2 py-1 text-xs font-black text-blue-800"
+                      >
+                        Hành trình
+                      </Link>
+                      <Link
+                        href={`/dispatcher?assign=${encodeURIComponent(order.code)}`}
+                        className="rounded-lg bg-orange-100 px-2 py-1 text-xs font-black text-orange-800"
+                      >
+                        Gán xe
+                      </Link>
+                    </div>
                   ) : null}
                 </div>
               ))

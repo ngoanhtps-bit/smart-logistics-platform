@@ -16,6 +16,7 @@ import { useEffect, useState } from "react";
 import { mapsDirectionsUrl } from "@/lib/maps/navigation";
 import { PodUpload } from "@/components/pod-upload";
 import { api } from "@/lib/api/client";
+import { invalidateShipmentFlow } from "@/lib/query/invalidate-shipments";
 import type { DriverTripOffer, ShipmentStatus } from "@/types/logistics";
 
 type TripsPayload = {
@@ -91,12 +92,10 @@ export function DriverDashboard() {
       if (!res.ok) throw new Error(json.message ?? "Thất bại");
       return json;
     },
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       setSelectedPending(null);
       setAcceptForm({ plate: "", phone: "", note: "" });
-      qc.invalidateQueries({ queryKey: ["driver-trips"] });
-      qc.invalidateQueries({ queryKey: ["shipments"] });
-      qc.invalidateQueries({ queryKey: ["notifications"] });
+      invalidateShipmentFlow(qc, vars.code);
     }
   });
 
@@ -115,8 +114,7 @@ export function DriverDashboard() {
   const statusMut = useMutation({
     mutationFn: (status: ShipmentStatus) => api.patchShipment(active!.code, { status }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["driver-trips"] });
-      qc.invalidateQueries({ queryKey: ["tracking", active?.code] });
+      invalidateShipmentFlow(qc, active?.code);
     }
   });
 
@@ -141,7 +139,7 @@ export function DriverDashboard() {
     },
     onSuccess: () => {
       setGpsMsg("Đã gửi vị trí GPS");
-      qc.invalidateQueries({ queryKey: ["tracking", active?.code] });
+      invalidateShipmentFlow(qc, active?.code);
     },
     onError: () => setGpsMsg("Bật quyền vị trí trên trình duyệt")
   });

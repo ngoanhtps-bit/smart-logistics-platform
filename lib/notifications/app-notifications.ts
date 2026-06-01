@@ -35,7 +35,8 @@ export async function fetchAppNotifications(userId?: string | null): Promise<App
         body: r.body,
         type: (r.type as AppNotification["type"]) || "info",
         read: r.read,
-        createdAt: r.created_at
+        createdAt: r.created_at,
+        shipmentCode: (r.shipment_code as string) ?? undefined
       }));
     }
   }

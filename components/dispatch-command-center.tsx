@@ -15,6 +15,7 @@ import {
   shipmentNeedsAssign,
   shipmentWaitingDriver
 } from "@/lib/dispatch/shipment-assign";
+import { invalidateShipmentFlow } from "@/lib/query/invalidate-shipments";
 import type { RegisteredDriver, ShipmentStatus } from "@/types/logistics";
 
 async function createOrder(body: Record<string, string>) {
@@ -149,7 +150,7 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
       setMsg(`Đã tạo đơn ${data.code} — chọn bên dưới để gán xe.`);
       setSelectedCode(data.code);
       setFilter("need_assign");
-      qc.invalidateQueries({ queryKey: ["shipments"] });
+      invalidateShipmentFlow(qc, data.code);
     },
     onError: (e) => {
       setMsgOk(false);
@@ -177,8 +178,7 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
     onSuccess: (data: { message?: string }) => {
       setMsgOk(true);
       setMsg(data.message ?? "Đã gửi — tài xế chốt trên app.");
-      qc.invalidateQueries({ queryKey: ["shipments"] });
-      qc.invalidateQueries({ queryKey: ["notifications"] });
+      invalidateShipmentFlow(qc, selectedCode);
     },
     onError: (e) => {
       setMsgOk(false);
@@ -201,7 +201,7 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
     onSuccess: (data: { message?: string }) => {
       setMsgOk(true);
       setMsg(data.message ?? "Đã hủy gửi chuyến.");
-      qc.invalidateQueries({ queryKey: ["shipments"] });
+      invalidateShipmentFlow(qc, selectedCode);
     },
     onError: (e) => {
       setMsgOk(false);
@@ -214,9 +214,7 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
     onSuccess: () => {
       setMsgOk(true);
       setMsg(`Đã gán nhanh (không qua app) ${assign.vehiclePlate} → ${selectedCode}.`);
-      qc.invalidateQueries({ queryKey: ["shipments"] });
-      qc.invalidateQueries({ queryKey: ["fleet"] });
-      qc.invalidateQueries({ queryKey: ["tracking", selectedCode] });
+      invalidateShipmentFlow(qc, selectedCode);
     },
     onError: (e) => {
       setMsgOk(false);

@@ -228,7 +228,7 @@ export async function offerTripToDriver(input: {
   await createAppNotification({
     userId: input.targetDriverUserId,
     title: `Cần chốt chuyến ${input.code}`,
-    body: `${route}${input.vehiclePlate ? ` · xe gợi ý ${input.vehiclePlate}` : ""}. Mở /driver để Xác nhận hoặc Từ chối.`,
+    body: `${route}${input.vehiclePlate ? ` · xe gợi ý ${input.vehiclePlate}` : ""}. Bấm thông báo hoặc vào /driver để Xác nhận / Từ chối.`,
     type: "warning",
     shipmentCode: input.code
   });
@@ -280,10 +280,7 @@ export async function driverRespondTrip(
       actorUserId: userId,
       actorRole: "driver"
     });
-    await notifyDispatchers(
-      `Tài xế từ chối ${code}`,
-      `${route}. Điều phối gán tài xế khác.`
-    );
+    await notifyDispatchersTrip(code, `Tài xế từ chối ${code}`, `${route}. Điều phối gán tài xế khác.`);
     return { ok: true, action: "decline" as const };
   }
 
@@ -322,6 +319,8 @@ export async function driverRespondTrip(
     })
     .eq("code", code);
 
+  const { data: shipRow } = await c.from("shipments").select("customer_id").eq("code", code).maybeSingle();
+
   await logShipmentEvent({
     shipmentCode: code,
     eventType: "driver_accepted",
@@ -330,7 +329,19 @@ export async function driverRespondTrip(
     actorRole: "driver",
     meta: { plate, phone }
   });
-  await notifyDispatchers(
+
+  if (shipRow?.customer_id) {
+    await createAppNotification({
+      userId: shipRow.customer_id as string,
+      title: `Tài xế đã nhận chuyến ${code}`,
+      body: `${route} · ${plate ?? "—"}. Theo dõi GPS trên app.`,
+      type: "success",
+      shipmentCode: code
+    });
+  }
+
+  await notifyDispatchersTrip(
+    code,
     `Tài xế đã chốt ${code}`,
     `${user?.name ?? "Tài xế"} · ${plate ?? "—"} · ${phone || "—"} · ${route}`
   );
@@ -338,7 +349,7 @@ export async function driverRespondTrip(
   return { ok: true, action: "accept" as const, plate, phone };
 }
 
-async function notifyDispatchers(title: string, body: string) {
+async function notifyDispatchersTrip(shipmentCode: string, title: string, body: string) {
   const c = await client();
   if (!c) return;
   const { data: dispatchers } = await c.from("users").select("id").in("role", ["dispatcher", "admin"]);
@@ -347,7 +358,8 @@ async function notifyDispatchers(title: string, body: string) {
       userId: u.id as string,
       title,
       body,
-      type: "success"
+      type: "success",
+      shipmentCode
     });
   }
 }

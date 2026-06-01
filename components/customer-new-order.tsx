@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Loader2, Package } from "lucide-react";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { invalidateShipmentFlow } from "@/lib/query/invalidate-shipments";
 
 export function CustomerNewOrder() {
   const router = useRouter();
@@ -30,7 +31,7 @@ export function CustomerNewOrder() {
       return data as { code: string };
     },
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ["shipments"] });
+      invalidateShipmentFlow(qc, data.code);
       router.push(`/tracking/${data.code}`);
     }
   });
