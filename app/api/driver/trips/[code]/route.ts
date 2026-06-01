@@ -17,7 +17,8 @@ export async function POST(request: NextRequest, { params }: Props) {
     const result = await driverRespondTrip(user.id, code, action, {
       plate: body.plate ? String(body.plate) : undefined,
       phone: body.phone ? String(body.phone) : undefined,
-      note: body.note ? String(body.note) : undefined
+      note: body.note ? String(body.note) : undefined,
+      declineReason: body.declineReason ? String(body.declineReason) : undefined
     });
     return NextResponse.json({
       ...result,

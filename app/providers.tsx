@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import { AuthSessionProvider } from "@/components/auth-session-provider";
+import { LogisticsSyncEffects } from "@/components/logistics-sync-effects";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -19,7 +20,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <AuthSessionProvider>{children}</AuthSessionProvider>
+      <AuthSessionProvider>
+        <LogisticsSyncEffects />
+        {children}
+      </AuthSessionProvider>
     </QueryClientProvider>
   );
 }

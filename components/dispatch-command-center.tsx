@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { AlertCircle, CheckCircle2, Loader2, Plus, UserPlus } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Plus, Sparkles, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { ListToolbar } from "@/components/list-toolbar";
 import { useFleet, useShipments } from "@/hooks/use-shipments";
@@ -15,6 +15,8 @@ import {
   shipmentNeedsAssign,
   shipmentWaitingDriver
 } from "@/lib/dispatch/shipment-assign";
+import type { DriverSuggestion } from "@/lib/dispatch/suggest-drivers";
+import { getShipmentSlaInfo, sortShipmentsBySla } from "@/lib/dispatch/sla";
 import { invalidateShipmentFlow } from "@/lib/query/invalidate-shipments";
 import type { RegisteredDriver, ShipmentStatus } from "@/types/logistics";
 
@@ -112,13 +114,27 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
         matchesSearch(q, [s.code, s.route, s.driver, s.vehiclePlate, s.statusLabel, s.cargoType])
       );
     }
-    return list;
+    return sortShipmentsBySla(list);
   }, [shipments, filter, search]);
 
   const selected = useMemo(
     () => shipments?.find((s) => s.code === selectedCode),
     [shipments, selectedCode]
   );
+
+  const { data: driverSuggestions, isFetching: suggestionsLoading } = useQuery({
+    queryKey: ["suggest-drivers", selectedCode],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/dispatcher/suggest-drivers?code=${encodeURIComponent(selectedCode)}`,
+        { credentials: "include" }
+      );
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.message ?? "Không gợi ý được");
+      return (json.suggestions ?? []) as DriverSuggestion[];
+    },
+    enabled: Boolean(selectedCode) && selected?.offerStatus !== "pending"
+  });
 
   useEffect(() => {
     if (initialAssignCode) setSelectedCode(initialAssignCode);
@@ -159,16 +175,20 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
   });
 
   const offerMut = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (override?: {
+      targetDriverUserId?: string;
+      vehiclePlate?: string;
+      vehicleType?: string;
+    }) => {
       const res = await fetch("/api/dispatcher/offer-trip", {
         method: "POST",
         credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           code: selectedCode,
-          targetDriverUserId,
-          vehiclePlate: assign.vehiclePlate,
-          vehicleType: assign.vehicleType
+          targetDriverUserId: override?.targetDriverUserId ?? targetDriverUserId,
+          vehiclePlate: override?.vehiclePlate ?? assign.vehiclePlate,
+          vehicleType: override?.vehicleType ?? assign.vehicleType
         })
       });
       const json = await res.json();
@@ -232,18 +252,27 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
     });
   }
 
-  function pickRegisteredDriver(userId: string) {
+  function pickRegisteredDriver(userId: string, d?: RegisteredDriver) {
     setTargetDriverUserId(userId);
-    const d = registeredDrivers?.find((x) => x.userId === userId);
-    if (d) {
+    const driver = d ?? registeredDrivers?.find((x) => x.userId === userId);
+    if (driver) {
       setAssign({
         ...assign,
-        driverName: d.name,
-        driverPhone: d.phone,
-        vehiclePlate: d.plate || assign.vehiclePlate,
-        vehicleType: d.vehicleType || assign.vehicleType
+        driverName: driver.name,
+        driverPhone: driver.phone,
+        vehiclePlate: driver.plate || assign.vehiclePlate,
+        vehicleType: driver.vehicleType || assign.vehicleType
       });
     }
+  }
+
+  function quickOfferSuggestion(s: DriverSuggestion) {
+    pickRegisteredDriver(s.userId, s);
+    offerMut.mutate({
+      targetDriverUserId: s.userId,
+      vehiclePlate: s.plate || assign.vehiclePlate,
+      vehicleType: s.vehicleType || assign.vehicleType
+    });
   }
 
   return (
@@ -341,6 +370,7 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
               <table className="w-full min-w-[640px] text-left text-sm">
                 <thead className="bg-[#102033] text-xs font-black uppercase text-white">
                   <tr>
+                    <th className="px-4 py-3">SLA</th>
                     <th className="px-4 py-3">Mã đơn</th>
                     <th className="px-4 py-3">Tuyến</th>
                     <th className="px-4 py-3">Trạng thái</th>
@@ -356,11 +386,29 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
                     const waiting = shipmentWaitingDriver(s);
                     const isSelected = s.code === selectedCode;
                     const offerLabel = s.offerStatus ? offerStatusLabels[s.offerStatus] : "";
+                    const sla = getShipmentSlaInfo(s);
                     return (
                       <tr
                         key={s.code}
                         className={`border-t border-slate-100 ${isSelected ? "bg-blue-50" : "bg-white hover:bg-slate-50"}`}
                       >
+                        <td className="px-4 py-3">
+                          {sla.label ? (
+                            <span
+                              className={`rounded-full px-2 py-1 text-[10px] font-black ${
+                                sla.level === "critical"
+                                  ? "bg-red-100 text-red-800"
+                                  : sla.level === "warn"
+                                    ? "bg-amber-100 text-amber-900"
+                                    : "bg-slate-100 text-slate-600"
+                              }`}
+                            >
+                              {sla.label}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-300">—</span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 font-black text-[#102033]">{s.code}</td>
                         <td className="max-w-[200px] truncate px-4 py-3 font-semibold text-slate-600">{s.route}</td>
                         <td className="px-4 py-3">
@@ -450,6 +498,38 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
                     Tài xế đã từ chối — chọn tài xế khác và gửi chốt lại.
                   </p>
                 ) : null}
+                {selected?.offerStatus !== "pending" && (driverSuggestions?.length ?? 0) > 0 ? (
+                  <div className="mt-4 rounded-2xl border border-[#2563eb]/20 bg-blue-50/60 p-3">
+                    <p className="flex items-center gap-2 text-xs font-black uppercase text-[#2563eb]">
+                      <Sparkles size={14} /> Gợi ý tài xế (1 nút gửi chốt)
+                    </p>
+                    <ul className="mt-2 grid gap-2">
+                      {driverSuggestions!.slice(0, 3).map((s) => (
+                        <li
+                          key={s.userId}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white px-3 py-2 text-sm"
+                        >
+                          <div>
+                            <span className="font-black text-[#102033]">{s.name}</span>
+                            <span className="ml-2 text-xs font-bold text-emerald-700">+{s.score}</span>
+                            <p className="text-xs text-slate-500">{s.reasons.join(" · ")}</p>
+                          </div>
+                          <button
+                            type="button"
+                            className="rounded-lg bg-[#2563eb] px-3 py-1.5 text-xs font-black text-white disabled:opacity-50"
+                            disabled={offerMut.isPending || s.busy}
+                            onClick={() => quickOfferSuggestion(s)}
+                          >
+                            Gửi chốt
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                    {suggestionsLoading ? (
+                      <p className="mt-1 text-xs text-slate-500">Đang tính gợi ý...</p>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="mt-4 grid gap-2">
                   <label className="text-xs font-bold uppercase text-slate-500">Tài xế đăng ký app *</label>
                   <select
@@ -532,7 +612,7 @@ export function DispatchCommandCenter({ initialAssignCode }: { initialAssignCode
                   className="btn-primary mt-4 w-full"
                   type="button"
                   disabled={!targetDriverUserId || offerMut.isPending || selected?.offerStatus === "pending"}
-                  onClick={() => offerMut.mutate()}
+                  onClick={() => offerMut.mutate(undefined)}
                 >
                   {offerMut.isPending ? (
                     <Loader2 className="animate-spin" size={18} />

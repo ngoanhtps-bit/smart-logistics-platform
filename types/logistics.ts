@@ -57,6 +57,7 @@ export interface Shipment {
   cargoType: string;
   weight: string;
   createdAt: string;
+  updatedAt?: string;
   offerStatus?: DriverOfferStatus;
   targetDriverId?: string | null;
   driverConfirmedAt?: string;

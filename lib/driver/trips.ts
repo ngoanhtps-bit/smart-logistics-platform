@@ -236,11 +236,13 @@ export async function offerTripToDriver(input: {
   return { code: input.code, driverId, route };
 }
 
+const DECLINE_REASONS = ["xe_hong", "trung_lich", "tuyen_xa", "khac"] as const;
+
 export async function driverRespondTrip(
   userId: string,
   code: string,
   action: "accept" | "decline",
-  report?: { plate?: string; phone?: string; note?: string }
+  report?: { plate?: string; phone?: string; note?: string; declineReason?: string }
 ) {
   const c = await client();
   if (!c) throw new Error("Không kết nối Supabase");
@@ -262,12 +264,26 @@ export async function driverRespondTrip(
   const route = `${row.pickup_location} → ${row.delivery_location}`;
 
   if (action === "decline") {
+    const reasonLabels: Record<string, string> = {
+      xe_hong: "Xe hỏng / sửa chữa",
+      trung_lich: "Trùng lịch chuyến",
+      tuyen_xa: "Tuyến quá xa",
+      khac: "Lý do khác"
+    };
+    const reasonKey = report?.declineReason?.trim();
+    const reasonText =
+      reasonKey && DECLINE_REASONS.includes(reasonKey as (typeof DECLINE_REASONS)[number])
+        ? reasonLabels[reasonKey]
+        : reasonKey ?? "";
+    const noteParts = [reasonText, report?.note?.trim()].filter(Boolean);
+    const combinedNote = noteParts.join(" · ") || null;
+
     await c
       .from("shipments")
       .update({
         offer_status: "declined",
         driver_declined_at: now,
-        driver_note: report?.note ?? null,
+        driver_note: combinedNote,
         target_driver_id: null,
         updated_at: now
       })
@@ -276,11 +292,16 @@ export async function driverRespondTrip(
     await logShipmentEvent({
       shipmentCode: code,
       eventType: "driver_declined",
-      message: `Tài xế từ chối · ${route}`,
+      message: `Tài xế từ chối${combinedNote ? ` · ${combinedNote}` : ""} · ${route}`,
       actorUserId: userId,
-      actorRole: "driver"
+      actorRole: "driver",
+      meta: reasonKey ? { declineReason: reasonKey } : undefined
     });
-    await notifyDispatchersTrip(code, `Tài xế từ chối ${code}`, `${route}. Điều phối gán tài xế khác.`);
+    await notifyDispatchersTrip(
+      code,
+      `Tài xế từ chối ${code}`,
+      `${combinedNote ? `${combinedNote} · ` : ""}${route}. Điều phối gán tài xế khác.`
+    );
     return { ok: true, action: "decline" as const };
   }
 

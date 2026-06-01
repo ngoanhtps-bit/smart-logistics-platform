@@ -1,4 +1,5 @@
 import { hasDeclinedOffer, hasPendingOffer } from "@/lib/dispatch/offer-status";
+import { getShipmentSlaInfo, sortShipmentsBySla } from "@/lib/dispatch/sla";
 import { shipmentNeedsAssign, shipmentWaitingDriver } from "@/lib/dispatch/shipment-assign";
 import type { Shipment, ShipmentOpsAlert, ShipmentOpsOverview } from "@/types/logistics";
 
@@ -13,7 +14,20 @@ export function buildOperationsOverview(shipments: Shipment[]): ShipmentOpsOverv
 
   const alerts: ShipmentOpsAlert[] = [];
 
-  for (const s of waitingDriver.slice(0, 5)) {
+  const slaSorted = sortShipmentsBySla(shipments);
+  for (const s of slaSorted.filter((x) => getShipmentSlaInfo(x).level !== "ok").slice(0, 6)) {
+    const sla = getShipmentSlaInfo(s);
+    if (!sla.label) continue;
+    alerts.push({
+      level: sla.level === "critical" ? "error" : sla.level === "warn" ? "warning" : "info",
+      code: s.code,
+      message: `${s.code}: ${sla.label}`,
+      href: `/dispatcher?assign=${encodeURIComponent(s.code)}`
+    });
+  }
+
+  for (const s of waitingDriver.slice(0, 3)) {
+    if (alerts.some((a) => a.code === s.code)) continue;
     alerts.push({
       level: "warning",
       code: s.code,

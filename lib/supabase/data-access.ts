@@ -3,6 +3,7 @@ import { createSupabaseAdminClient } from "@/lib/supabase/admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { getSupabaseConfig } from "@/lib/supabase/config";
 import { logShipmentEvent } from "@/lib/operations/shipment-events";
+import { assertStatusTransition } from "@/lib/shipment/status-transitions";
 import { statusLabels } from "@/lib/status-labels";
 import type {
   DriverOfferStatus,
@@ -25,6 +26,7 @@ type DbShipment = {
   status: string;
   eta: string | null;
   created_at: string;
+  updated_at?: string | null;
   driver_id?: string | null;
   vehicle_id?: string | null;
   offer_status?: string | null;
@@ -77,6 +79,7 @@ function mapShipment(
     cargoType: row.cargo_type,
     weight: row.weight ?? "",
     createdAt: row.created_at,
+    updatedAt: row.updated_at ?? row.created_at,
     offerStatus,
     targetDriverId: row.target_driver_id ?? null,
     driverConfirmedAt: row.driver_confirmed_at ?? undefined,
@@ -316,6 +319,16 @@ export async function supabasePatchShipment(
 ): Promise<Shipment | null> {
   const client = await getClient();
   if (!client) return null;
+
+  const { data: current } = await client
+    .from("shipments")
+    .select("status, offer_status")
+    .eq("code", code)
+    .maybeSingle();
+
+  if (input.status && current?.status) {
+    assertStatusTransition(current.status as ShipmentStatus, input.status);
+  }
 
   if (input.driverName) {
     const { data: existing } = await client

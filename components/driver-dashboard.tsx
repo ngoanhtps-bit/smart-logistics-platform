@@ -12,7 +12,10 @@ import {
   ThumbsUp,
   Truck
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useDriverAutoGps } from "@/hooks/use-driver-auto-gps";
+import { useDriverPendingAlerts } from "@/hooks/use-driver-pending-alerts";
+import { ensureNotificationPermission } from "@/lib/browser/notify";
 import { mapsDirectionsUrl } from "@/lib/maps/navigation";
 import { PodUpload } from "@/components/pod-upload";
 import { api } from "@/lib/api/client";
@@ -44,8 +47,10 @@ export function DriverDashboard() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<"pending" | "active" | "history">("pending");
   const [acceptForm, setAcceptForm] = useState({ plate: "", phone: "", note: "" });
+  const [declineReason, setDeclineReason] = useState("");
   const [selectedPending, setSelectedPending] = useState<string | null>(null);
   const [gpsMsg, setGpsMsg] = useState<string | null>(null);
+  const [notifyPerm, setNotifyPerm] = useState<string>("default");
 
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["driver-trips"],
@@ -85,7 +90,8 @@ export function DriverDashboard() {
           action,
           plate: acceptForm.plate,
           phone: acceptForm.phone,
-          note: acceptForm.note
+          note: acceptForm.note,
+          declineReason: action === "decline" ? declineReason : undefined
         })
       });
       const json = await res.json();
@@ -95,12 +101,31 @@ export function DriverDashboard() {
     onSuccess: (_data, vars) => {
       setSelectedPending(null);
       setAcceptForm({ plate: "", phone: "", note: "" });
+      setDeclineReason("");
       invalidateShipmentFlow(qc, vars.code);
     }
   });
 
   const active = data?.active?.[0];
   const pendingList = data?.pending ?? [];
+
+  useDriverPendingAlerts(pendingList, true);
+  const autoGps = useDriverAutoGps(
+    active?.code,
+    Boolean(active && ["assigned", "pickup", "loaded", "in_transit"].includes(active.status))
+  );
+
+  const focusPending = useMemo(() => pendingList[0], [pendingList]);
+
+  useEffect(() => {
+    if (pendingList.length > 0) setTab("pending");
+  }, [pendingList.length]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      setNotifyPerm(Notification.permission);
+    }
+  }, []);
 
   useEffect(() => {
     if (!profileData) return;
@@ -168,6 +193,18 @@ export function DriverDashboard() {
               <Bell size={16} />
               {unread > 0 ? `${unread} mới` : "Thông báo"}
             </span>
+            {notifyPerm !== "granted" ? (
+              <button
+                type="button"
+                className="btn-ghost text-sm"
+                onClick={async () => {
+                  const p = await ensureNotificationPermission();
+                  setNotifyPerm(p === "unsupported" ? "denied" : p);
+                }}
+              >
+                Bật thông báo
+              </button>
+            ) : null}
             <button type="button" className="btn-ghost text-sm" onClick={() => refetch()}>
               Làm mới
             </button>
@@ -205,6 +242,21 @@ export function DriverDashboard() {
         </p>
       ) : error ? (
         <p className="text-sm font-bold text-red-600">{(error as Error).message}</p>
+      ) : null}
+
+      {focusPending && tab === "pending" ? (
+        <section className="rounded-3xl border-2 border-amber-300 bg-amber-50 p-5">
+          <p className="text-xs font-black uppercase text-amber-800">Ưu tiên — chốt ngay</p>
+          <p className="mt-1 text-xl font-black text-[#102033]">{focusPending.code}</p>
+          <p className="text-sm font-semibold text-slate-600">{focusPending.route}</p>
+          <button
+            type="button"
+            className="btn-primary mt-3 w-full"
+            onClick={() => setSelectedPending(focusPending.code)}
+          >
+            <Truck size={18} /> Mở form chốt
+          </button>
+        </section>
       ) : null}
 
       {tab === "pending" ? (
@@ -255,6 +307,17 @@ export function DriverDashboard() {
                       value={acceptForm.note}
                       onChange={(e) => setAcceptForm({ ...acceptForm, note: e.target.value })}
                     />
+                    <select
+                      className="rounded-xl border px-3 py-2 text-sm font-semibold"
+                      value={declineReason}
+                      onChange={(e) => setDeclineReason(e.target.value)}
+                    >
+                      <option value="">Lý do từ chối (nếu từ chối)</option>
+                      <option value="xe_hong">Xe hỏng / sửa chữa</option>
+                      <option value="trung_lich">Trùng lịch chuyến</option>
+                      <option value="tuyen_xa">Tuyến quá xa</option>
+                      <option value="khac">Lý do khác</option>
+                    </select>
                     <div className="flex flex-wrap gap-2">
                       <button
                         type="button"
@@ -267,7 +330,7 @@ export function DriverDashboard() {
                       <button
                         type="button"
                         className="btn-secondary flex-1"
-                        disabled={respondMut.isPending}
+                        disabled={respondMut.isPending || !declineReason}
                         onClick={() => respondMut.mutate({ code: trip.code, action: "decline" })}
                       >
                         <ThumbsDown size={18} /> Từ chối
@@ -315,6 +378,11 @@ export function DriverDashboard() {
                   {active.driverReportPlate || "—"} · {active.vehicleType}
                 </p>
                 <p className="text-sm text-slate-400">{active.statusLabel}</p>
+                {autoGps.isSending ? (
+                  <p className="mt-2 text-xs font-bold text-emerald-300">Đang gửi GPS tự động…</p>
+                ) : (
+                  <p className="mt-2 text-xs font-bold text-emerald-300/80">GPS tự động mỗi 4 phút khi chuyến đang chạy</p>
+                )}
                 <Link href={`/tracking/${active.code}`} className="mt-3 inline-block text-sm font-bold text-blue-300">
                   Tracking live →
                 </Link>

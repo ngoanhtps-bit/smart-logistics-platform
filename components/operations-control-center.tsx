@@ -16,6 +16,7 @@ import {
 import { useMemo, useState } from "react";
 import { offerBadgeClass, offerStatusLabels } from "@/lib/dispatch/offer-status";
 import { eventTypeLabels } from "@/lib/operations/shipment-events";
+import { getShipmentSlaInfo, sortShipmentsBySla } from "@/lib/dispatch/sla";
 import { matchesSearch } from "@/lib/list-search";
 import { ShipmentJourneyPanel } from "@/components/shipment-journey-panel";
 import { invalidateShipmentFlow } from "@/lib/query/invalidate-shipments";
@@ -84,7 +85,7 @@ export function OperationsControlCenter() {
         matchesSearch(q, [s.code, s.route, s.driver, s.vehiclePlate, s.statusLabel, s.offerStatus ?? ""])
       );
     }
-    return list;
+    return sortShipmentsBySla(list);
   }, [shipments, listFilter, search]);
 
   const selected = useMemo(
@@ -255,7 +256,9 @@ export function OperationsControlCenter() {
             {filtered.length === 0 ? (
               <p className="py-8 text-center text-sm text-slate-500">Không có đơn phù hợp.</p>
             ) : (
-              filtered.map((s) => (
+              filtered.map((s) => {
+                const sla = getShipmentSlaInfo(s);
+                return (
                 <button
                   key={s.code}
                   type="button"
@@ -272,9 +275,24 @@ export function OperationsControlCenter() {
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="font-black text-[#102033]">{s.code}</span>
-                    <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-black text-slate-700">
-                      {s.statusLabel}
-                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {sla.label ? (
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[10px] font-black ${
+                            sla.level === "critical"
+                              ? "bg-red-100 text-red-800"
+                              : sla.level === "warn"
+                                ? "bg-amber-100 text-amber-900"
+                                : "bg-slate-100 text-slate-600"
+                          }`}
+                        >
+                          {sla.label}
+                        </span>
+                      ) : null}
+                      <span className="rounded-full bg-slate-200 px-2 py-0.5 text-xs font-black text-slate-700">
+                        {s.statusLabel}
+                      </span>
+                    </div>
                   </div>
                   <p className="mt-1 truncate text-sm font-semibold text-slate-600">{s.route}</p>
                   <p className="mt-1 text-xs font-bold text-slate-500">
@@ -288,7 +306,8 @@ export function OperationsControlCenter() {
                     </span>
                   ) : null}
                 </button>
-              ))
+              );
+              })
             )}
           </div>
         </section>
