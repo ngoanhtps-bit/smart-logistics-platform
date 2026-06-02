@@ -14,7 +14,13 @@ import { invalidateShipmentFlow } from "@/lib/query/invalidate-shipments";
 import { journeyStatusMessage, shipmentProgressPercent } from "@/lib/shipment/workflow";
 import { isDeletableShipmentStatus } from "@/lib/shipments/deletable-status";
 
-export function CustomerOrdersList() {
+export function CustomerOrdersList({
+  selectedCode,
+  onSelectCode
+}: {
+  selectedCode?: string;
+  onSelectCode?: (code: string) => void;
+}) {
   const qc = useQueryClient();
   const { data: shipments, isLoading } = useShipments({ mine: true });
   const [search, setSearch] = useState("");
@@ -88,12 +94,26 @@ export function CustomerOrdersList() {
           return (
             <div
               key={id}
-              className="rounded-2xl border border-slate-100 p-4"
+              role={onSelectCode ? "button" : undefined}
+              tabIndex={onSelectCode ? 0 : undefined}
+              onClick={() => onSelectCode?.(s.code)}
+              onKeyDown={(e) => {
+                if (onSelectCode && (e.key === "Enter" || e.key === " ")) onSelectCode(s.code);
+              }}
+              className={`rounded-2xl border p-4 transition ${
+                selectedCode === s.code
+                  ? "border-emerald-400 bg-emerald-50/60 ring-2 ring-emerald-200"
+                  : "border-slate-100 hover:border-emerald-200"
+              } ${onSelectCode ? "cursor-pointer" : ""}`}
             >
               <div className="grid gap-2 md:grid-cols-[auto_1fr_auto] md:items-center">
                 <RowCheckbox checked={bulk.isSelected(id)} onChange={() => bulk.toggle(id)} />
                 <div>
-                  <Link href={`/tracking/${s.code}`} className="font-black text-[#0b1f3a] hover:text-[#2563eb]">
+                  <Link
+                    href={`/tracking/${s.code}`}
+                    className="font-black text-[#0b1f3a] hover:text-[#2563eb]"
+                    onClick={(e) => e.stopPropagation()}
+                  >
                     {s.code}
                   </Link>
                   <p className="font-semibold text-slate-600">{s.route}</p>

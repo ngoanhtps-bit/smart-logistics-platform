@@ -13,6 +13,8 @@ import {
   Truck
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { driverTripUrl } from "@/lib/navigation/shipment-links";
 import { useDriverAutoGps } from "@/hooks/use-driver-auto-gps";
 import { useDriverPendingAlerts } from "@/hooks/use-driver-pending-alerts";
 import { ensureNotificationPermission } from "@/lib/browser/notify";
@@ -43,9 +45,17 @@ async function fetchTrips() {
   return json as TripsPayload;
 }
 
+type DriverTab = "pending" | "active" | "history" | "profile";
+
 export function DriverDashboard() {
   const qc = useQueryClient();
-  const [tab, setTab] = useState<"pending" | "active" | "history">("pending");
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get("tab") as DriverTab | null;
+  const focusCode = searchParams.get("focus");
+  const [tab, setTab] = useState<DriverTab>(
+    tabParam === "active" || tabParam === "history" || tabParam === "profile" ? tabParam : "pending"
+  );
   const [acceptForm, setAcceptForm] = useState({ plate: "", phone: "", note: "" });
   const [declineReason, setDeclineReason] = useState("");
   const [selectedPending, setSelectedPending] = useState<string | null>(null);
@@ -63,7 +73,7 @@ export function DriverDashboard() {
     queryFn: async () => {
       const res = await fetch("/api/driver/profile", { credentials: "include" });
       const json = await res.json();
-      return json.profile as { plate?: string; phone?: string; name?: string } | null;
+      return json.profile as { plate?: string; phone?: string; name?: string; vehicleType?: string } | null;
     }
   });
 
@@ -118,8 +128,26 @@ export function DriverDashboard() {
   const focusPending = useMemo(() => pendingList[0], [pendingList]);
 
   useEffect(() => {
-    if (pendingList.length > 0) setTab("pending");
-  }, [pendingList.length]);
+    if (tabParam === "active" || tabParam === "history" || tabParam === "profile" || tabParam === "pending") {
+      setTab(tabParam);
+    }
+  }, [tabParam]);
+
+  useEffect(() => {
+    if (focusCode && pendingList.some((t) => t.code === focusCode)) {
+      setTab("pending");
+      setSelectedPending(focusCode);
+    }
+  }, [focusCode, pendingList]);
+
+  useEffect(() => {
+    if (!tabParam && pendingList.length > 0) setTab("pending");
+  }, [pendingList.length, tabParam]);
+
+  function setDriverTab(next: DriverTab) {
+    setTab(next);
+    router.replace(`/driver?tab=${next}`);
+  }
 
   useEffect(() => {
     if (typeof window !== "undefined" && "Notification" in window) {
@@ -182,11 +210,12 @@ export function DriverDashboard() {
 
   return (
     <div className="grid gap-6">
-      <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+      <section className="rounded-3xl border border-orange-200 bg-white p-4 shadow-sm">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
-            <p className="text-sm font-black uppercase tracking-[0.12em] text-orange-600">App tài xế</p>
-            <h2 className="text-xl font-black text-[#102033]">Chuyến & chốt đơn</h2>
+            <h2 className="text-lg font-black text-[#102033]">
+              {tab === "pending" ? "Chốt chuyến" : tab === "active" ? "Đang chạy" : tab === "history" ? "Lịch sử" : "Hồ sơ"}
+            </h2>
           </div>
           <div className="flex items-center gap-2">
             <span className="flex items-center gap-1 rounded-xl bg-blue-50 px-3 py-2 text-sm font-black text-[#2563eb]">
@@ -214,20 +243,21 @@ export function DriverDashboard() {
           Điều phối gửi chuyến → bạn nhận thông báo → <strong>Chốt</strong> hoặc <strong>Từ chối</strong> → thông tin xe về
           bảng điều phối.
         </p>
-        <div className="mt-4 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap gap-2 lg:hidden">
           {(
             [
-              ["pending", `Chờ chốt (${pendingList.length})`],
-              ["active", `Đang chạy (${data?.active?.length ?? 0})`],
-              ["history", `Lịch sử (${data?.history?.length ?? 0})`]
+              ["pending", `Chốt (${pendingList.length})`],
+              ["active", `Chạy (${data?.active?.length ?? 0})`],
+              ["history", `Lịch sử`],
+              ["profile", "Hồ sơ"]
             ] as const
           ).map(([id, label]) => (
             <button
               key={id}
               type="button"
-              onClick={() => setTab(id)}
-              className={`rounded-xl px-4 py-2 text-sm font-bold ${
-                tab === id ? "bg-[#102033] text-white" : "bg-slate-100 text-slate-600"
+              onClick={() => setDriverTab(id)}
+              className={`rounded-xl px-3 py-2 text-xs font-bold ${
+                tab === id ? "bg-orange-600 text-white" : "bg-slate-100 text-slate-600"
               }`}
             >
               {label}
@@ -281,6 +311,9 @@ export function DriverDashboard() {
                       {trip.cargoType} · {trip.weight} · {trip.vehicleType}
                     </p>
                     <p className="mt-1 text-xs font-bold text-amber-700">ETA {trip.eta}</p>
+                    <Link href={driverTripUrl(trip.code)} className="mt-2 text-xs font-bold text-orange-600">
+                      Chi tiết chuyến →
+                    </Link>
                   </div>
                   <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-black text-amber-900">
                     Chờ bạn chốt
@@ -383,8 +416,8 @@ export function DriverDashboard() {
                 ) : (
                   <p className="mt-2 text-xs font-bold text-emerald-300/80">GPS tự động mỗi 4 phút khi chuyến đang chạy</p>
                 )}
-                <Link href={`/tracking/${active.code}`} className="mt-3 inline-block text-sm font-bold text-blue-300">
-                  Tracking live →
+                <Link href={driverTripUrl(active.code)} className="mt-3 inline-block text-sm font-bold text-orange-300">
+                  Mở chi tiết chuyến →
                 </Link>
               </section>
 
@@ -452,6 +485,34 @@ export function DriverDashboard() {
             </div>
           ) : null}
         </div>
+      ) : null}
+
+      {tab === "profile" ? (
+        <section className="rounded-3xl border border-slate-200 bg-white p-6">
+          <h3 className="font-black text-[#102033]">Hồ sơ tài xế</h3>
+          {profileData ? (
+            <dl className="mt-4 grid gap-2 text-sm">
+              <div className="flex justify-between">
+                <dt className="text-slate-500">Tên</dt>
+                <dd className="font-bold">{profileData.name || "—"}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate-500">SĐT</dt>
+                <dd className="font-bold">{profileData.phone || "—"}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate-500">Biển số</dt>
+                <dd className="font-bold">{profileData.plate || "—"}</dd>
+              </div>
+              <div className="flex justify-between">
+                <dt className="text-slate-500">Loại xe</dt>
+                <dd className="font-bold">{profileData.vehicleType || "—"}</dd>
+              </div>
+            </dl>
+          ) : (
+            <p className="mt-4 text-sm text-slate-500">Đang tải hồ sơ…</p>
+          )}
+        </section>
       ) : null}
 
       {tab === "history" ? (

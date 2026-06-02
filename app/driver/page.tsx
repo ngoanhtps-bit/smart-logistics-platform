@@ -1,19 +1,22 @@
 import type { Metadata } from "next";
+import { Suspense } from "react";
 import { DashboardAuthGuard } from "@/components/dashboard-auth-guard";
-import { DashboardShell } from "@/components/dashboard-shell";
+import { DriverAppShell } from "@/components/driver-app-shell";
 import { DriverDashboard } from "@/components/driver-dashboard";
 
 export const metadata: Metadata = {
   title: "App tài xế",
-  description: "Nhận chuyến, GPS, cập nhật trạng thái, upload POD và chat điều phối."
+  description: "Chốt chuyến, GPS tự động, cập nhật trạng thái — giao diện riêng cho tài xế."
 };
 
 export default function DriverPage() {
   return (
     <DashboardAuthGuard>
-      <DashboardShell title="App tài xế">
-        <DriverDashboard />
-      </DashboardShell>
+      <DriverAppShell>
+        <Suspense fallback={<p className="font-bold text-slate-500">Đang mở app tài xế…</p>}>
+          <DriverDashboard />
+        </Suspense>
+      </DriverAppShell>
     </DashboardAuthGuard>
   );
 }

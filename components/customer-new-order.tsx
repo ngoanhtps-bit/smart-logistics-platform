@@ -6,7 +6,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { invalidateShipmentFlow } from "@/lib/query/invalidate-shipments";
 
-export function CustomerNewOrder() {
+export function CustomerNewOrder({ onCreated }: { onCreated?: (code: string) => void }) {
   const router = useRouter();
   const qc = useQueryClient();
   const [form, setForm] = useState({
@@ -32,7 +32,8 @@ export function CustomerNewOrder() {
     },
     onSuccess: (data) => {
       invalidateShipmentFlow(qc, data.code);
-      router.push(`/tracking/${data.code}`);
+      if (onCreated) onCreated(data.code);
+      else router.push(`/tracking/${data.code}`);
     }
   });
 

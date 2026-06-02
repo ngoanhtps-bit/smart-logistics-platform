@@ -6,7 +6,10 @@ import { useRouter } from "next/navigation";
 import { Bell, Check, ExternalLink } from "lucide-react";
 import { useState } from "react";
 import { invalidateShipmentFlow } from "@/lib/query/invalidate-shipments";
+import { notificationWorkspaceUrl, roleHomePath } from "@/lib/navigation/shipment-links";
 import type { AppNotification } from "@/lib/notifications-store";
+import { useAuthStore } from "@/store/auth";
+import type { UserRole } from "@/types/logistics";
 
 async function fetchNotifications(): Promise<AppNotification[]> {
   const res = await fetch("/api/notifications", { credentials: "include", cache: "no-store" });
@@ -18,6 +21,7 @@ export function NotificationsPanel() {
   const [open, setOpen] = useState(false);
   const qc = useQueryClient();
   const router = useRouter();
+  const role = useAuthStore((s) => s.user?.role) as UserRole | undefined;
   const { data } = useQuery({
     queryKey: ["notifications"],
     queryFn: fetchNotifications,
@@ -42,7 +46,10 @@ export function NotificationsPanel() {
     setOpen(false);
     if (n.shipmentCode) {
       invalidateShipmentFlow(qc, n.shipmentCode);
-      router.push(`/tracking/${n.shipmentCode}`);
+      router.push(
+        notificationWorkspaceUrl(role, n.shipmentCode, { title: n.title })
+      );
+      return;
     }
   }
 
@@ -76,7 +83,9 @@ export function NotificationsPanel() {
                 <Check size={14} /> Đọc tất cả
               </button>
             </div>
-            <p className="mb-2 text-xs text-slate-500">Bấm thông báo có mã đơn → mở theo dõi & hành trình liên kết</p>
+            <p className="mb-2 text-xs text-slate-500">
+              Có mã đơn → mở đúng màn {role === "driver" ? "App tài xế" : role === "customer" ? "Khách hàng" : "Điều phối"}
+            </p>
             <div className="grid max-h-80 gap-2 overflow-y-auto">
               {data?.length ? null : (
                 <p className="py-4 text-center text-xs text-slate-400">Chưa có thông báo</p>
@@ -101,19 +110,21 @@ export function NotificationsPanel() {
                   <p className="mt-1 text-xs text-slate-600">{n.body}</p>
                   {n.shipmentCode ? (
                     <span className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-[#2563eb]">
-                      <ExternalLink size={12} /> Mở theo dõi
+                      <ExternalLink size={12} /> Mở màn làm việc
                     </span>
                   ) : null}
                 </button>
               ))}
             </div>
-            <Link
-              href="/dispatcher"
-              className="mt-3 block text-center text-xs font-bold text-slate-500 hover:text-[#2563eb]"
-              onClick={() => setOpen(false)}
-            >
-              Vào bảng điều phối →
-            </Link>
+            {role ? (
+              <Link
+                href={roleHomePath(role)}
+                className="mt-3 block text-center text-xs font-bold text-slate-500 hover:text-[#2563eb]"
+                onClick={() => setOpen(false)}
+              >
+                Về không gian {role} →
+              </Link>
+            ) : null}
           </div>
         </>
       ) : null}

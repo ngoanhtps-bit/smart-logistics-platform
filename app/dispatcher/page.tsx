@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
 import { DashboardAuthGuard } from "@/components/dashboard-auth-guard";
-import { DashboardShell } from "@/components/dashboard-shell";
+import { RoleWorkspaceShell } from "@/components/role-workspace-shell";
 import { DispatchBoard } from "@/components/dispatch-board";
 
 export const metadata: Metadata = {
-  title: "Bảng điều phối thời gian thực",
-  description: "Quản lý đơn, xe, tài xế, bản đồ trực tiếp, KPI và ghép chiều về."
+  title: "Trung tâm điều phối",
+  description: "Gán xe, gửi chốt app tài xế, điều khiển SLA — tách riêng từng luồng."
 };
 
 export default function DispatcherPage() {
   return (
     <DashboardAuthGuard>
-      <DashboardShell title="Bảng điều phối">
+      <RoleWorkspaceShell workspace="dispatcher" title="Trung tâm điều phối">
         <DispatchBoard />
-      </DashboardShell>
+      </RoleWorkspaceShell>
     </DashboardAuthGuard>
   );
 }

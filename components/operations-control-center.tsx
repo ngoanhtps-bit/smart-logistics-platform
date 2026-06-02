@@ -13,7 +13,7 @@ import {
   Send,
   Truck
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { offerBadgeClass, offerStatusLabels } from "@/lib/dispatch/offer-status";
 import { eventTypeLabels } from "@/lib/operations/shipment-events";
 import { getShipmentSlaInfo, sortShipmentsBySla } from "@/lib/dispatch/sla";
@@ -50,14 +50,18 @@ async function fetchOps() {
   return json as OpsPayload;
 }
 
-export function OperationsControlCenter() {
+export function OperationsControlCenter({ initialCode }: { initialCode?: string | null }) {
   const qc = useQueryClient();
-  const [selectedCode, setSelectedCode] = useState("");
+  const [selectedCode, setSelectedCode] = useState(initialCode ?? "");
   const [search, setSearch] = useState("");
   const [listFilter, setListFilter] = useState<ListFilter>("active");
   const [note, setNote] = useState("");
   const [newStatus, setNewStatus] = useState<ShipmentStatus>("in_transit");
   const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    if (initialCode) setSelectedCode(initialCode);
+  }, [initialCode]);
 
   const { data, isLoading, error, refetch, isFetching } = useQuery({
     queryKey: ["operations-overview"],

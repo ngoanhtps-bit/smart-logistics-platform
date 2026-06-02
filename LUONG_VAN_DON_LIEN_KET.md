@@ -1,29 +1,39 @@
 # Luồng vận đơn liên kết (end-to-end)
 
+## Ba không gian tách riêng
+
+| Vai trò | URL | Nội dung chính |
+|---------|-----|----------------|
+| **Khách** | `/customer` | Tab Tạo đơn · Đơn & hành trình · Hóa đơn |
+| **Điều phối** | `/dispatcher` | Hub 3 luồng → tab Điều khiển / Gán & chốt / … |
+| **Tài xế** | `/driver` | App riêng (bottom nav): Chốt · Chạy · Lịch sử · Hồ sơ |
+
+Chi tiết một chuyến (tài xế): `/driver/trip/[mã]`
+
 ## Sơ đồ
 
 ```
-Khách tạo đơn → Thông báo Điều phối
+Khách (/customer) tạo đơn → Thông báo Điều phối
        ↓
-Điều phối gán / gửi chốt app → Thông báo Tài xế
+Điều phối (/dispatcher?tab=assign) gửi chốt → Thông báo Tài xế
        ↓
-Tài xế chốt → Thông báo Điều phối + Khách
+Tài xế (/driver?tab=pending) chốt → Thông báo Điều phối + Khách
        ↓
-Tài xế cập nhật trạng thái + GPS → Tracking realtime
+Tài xế cập nhật + GPS → /tracking/[mã] (bản đồ chung)
        ↓
-Giao hàng → POD + Hóa đơn (nếu bật)
+Giao hàng → POD + Hóa đơn
 ```
 
 ## Màn hình trung tâm: `/tracking/[mã đơn]`
 
 - **Hành trình 6 bước** (tiến độ %)
-- **Nút hành động** theo vai trò đăng nhập
+- **Nút «Về màn làm việc»** theo vai trò đăng nhập (không chỉ tracking)
 - **Nhật ký sự kiện** (SQL 020)
 - Bản đồ GPS + timeline
 
 ## Liên kết thông báo
 
-Mọi thông báo có `shipment_code` → bấm vào mở `/tracking/...` và refresh dữ liệu đồng bộ.
+Mọi thông báo có `shipment_code` → mở **đúng màn vai trò** (khách → `/customer?code=`, tài xế → `/driver`, điều phối → `/dispatcher?assign=`).
 
 ## API hành trình
 

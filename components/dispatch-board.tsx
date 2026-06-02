@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { AnalyticsPanel } from "@/components/analytics-panel";
 import { DispatchActiveShipments } from "@/components/dispatch-active-shipments";
@@ -11,26 +11,49 @@ import { DispatchPipelineLive } from "@/components/dispatch-pipeline-live";
 import { DispatcherInvoices } from "@/components/dispatcher-invoices";
 import { FleetLive } from "@/components/fleet-live";
 import { DashboardKpisLive } from "@/components/dashboard-kpis-live";
+import { DispatcherFlowHub, type DispatcherLane } from "@/components/dispatcher-flow-hub";
 import { OperationsControlCenter } from "@/components/operations-control-center";
 
 type BoardTab = "control" | "assign" | "fleet" | "pipeline" | "map" | "more";
 
+function tabFromUrl(searchParams: URLSearchParams): BoardTab {
+  const t = searchParams.get("tab");
+  if (t === "assign" || t === "control" || t === "fleet" || t === "pipeline" || t === "map" || t === "more") {
+    return t;
+  }
+  if (searchParams.get("assign")) return "assign";
+  return "control";
+}
+
 function DispatchBoardInner() {
   const searchParams = useSearchParams();
   const assignFromUrl = searchParams.get("assign");
-  const [tab, setTab] = useState<BoardTab>(assignFromUrl ? "assign" : "control");
+  const codeFromUrl = searchParams.get("code");
+  const [tab, setTab] = useState<BoardTab>(() => tabFromUrl(searchParams));
 
-  const tabs: { id: BoardTab; label: string }[] = [
-    { id: "control", label: "Điều khiển" },
-    { id: "assign", label: "Gán xe & đơn" },
-    { id: "fleet", label: "Đội xe" },
-    { id: "pipeline", label: "Luồng đơn" },
-    { id: "map", label: "Bản đồ" },
-    { id: "more", label: "Khác" }
+  useEffect(() => {
+    setTab(tabFromUrl(searchParams));
+  }, [searchParams]);
+
+  function selectLane(lane: DispatcherLane) {
+    if (lane === "assign") setTab("assign");
+    else if (lane === "waiting") setTab("assign");
+    else setTab("control");
+  }
+
+  const tabs: { id: BoardTab; label: string; hint: string }[] = [
+    { id: "control", label: "① Điều khiển", hint: "Đơn đang chạy · SLA" },
+    { id: "assign", label: "② Gán & chốt", hint: "Gửi app tài xế" },
+    { id: "fleet", label: "Đội xe", hint: "Xe rỗi" },
+    { id: "pipeline", label: "Kanban", hint: "Tổng quan" },
+    { id: "map", label: "Bản đồ", hint: "GPS" },
+    { id: "more", label: "KPI", hint: "Báo cáo" }
   ];
 
   return (
     <div className="grid gap-6">
+      <DispatcherFlowHub onSelectLane={selectLane} activeCode={assignFromUrl ?? codeFromUrl} />
+
       <div className="sticky top-0 z-10 -mx-1 rounded-2xl border border-slate-200 bg-white/95 px-1 py-2 shadow-sm backdrop-blur">
         <div className="flex flex-wrap gap-2">
           {tabs.map((t) => (
@@ -42,13 +65,16 @@ function DispatchBoardInner() {
                 tab === t.id ? "bg-[#102033] text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
             >
-              {t.label}
+              <span>{t.label}</span>
+              <span className="mt-0.5 block text-[10px] font-semibold opacity-80">{t.hint}</span>
             </button>
           ))}
         </div>
       </div>
 
-      {tab === "control" ? <OperationsControlCenter /> : null}
+      {tab === "control" ? (
+        <OperationsControlCenter initialCode={codeFromUrl ?? assignFromUrl} />
+      ) : null}
 
       {tab === "assign" ? <DispatchCommandCenter initialAssignCode={assignFromUrl} /> : null}
 

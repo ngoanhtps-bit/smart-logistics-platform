@@ -7,9 +7,9 @@ import { useAuthStore } from "@/store/auth";
 import type { UserRole } from "@/types/logistics";
 
 const allNav: { href: string; label: string; icon: typeof LayoutDashboard; roles: UserRole[] }[] = [
-  { href: "/dispatcher", label: "Điều phối", icon: LayoutDashboard, roles: ["dispatcher", "admin"] },
-  { href: "/driver", label: "App tài xế", icon: Truck, roles: ["driver", "admin"] },
-  { href: "/customer", label: "Khách hàng", icon: Boxes, roles: ["customer", "admin"] },
+  { href: "/dispatcher?tab=control", label: "Điều phối", icon: LayoutDashboard, roles: ["dispatcher", "admin"] },
+  { href: "/driver?tab=pending", label: "App tài xế", icon: Truck, roles: ["driver", "admin"] },
+  { href: "/customer?tab=orders", label: "Khách hàng", icon: Boxes, roles: ["customer", "admin"] },
   { href: "/marketplace", label: "Sàn ghép chuyến", icon: Store, roles: ["dispatcher", "admin", "customer"] },
   { href: "/admin", label: "Quản trị", icon: Settings, roles: ["admin"] }
 ];
@@ -17,11 +17,22 @@ const allNav: { href: string; label: string; icon: typeof LayoutDashboard; roles
 export function DashboardNav() {
   const pathname = usePathname();
   const role = useAuthStore((s) => s.user?.role);
-  const items = role ? allNav.filter((n) => n.roles.includes(role)) : allNav;
+  const items = role
+    ? allNav.filter((n) => n.roles.includes(role) && (role !== "driver" || n.href.startsWith("/driver")))
+    : allNav;
+  const primary =
+    role === "dispatcher"
+      ? allNav.filter((n) => n.roles.includes("dispatcher"))
+      : role === "customer"
+        ? allNav.filter((n) => n.roles.includes("customer") && !n.href.includes("marketplace"))
+        : role === "driver"
+          ? allNav.filter((n) => n.href.startsWith("/driver"))
+          : items;
+  const showItems = role === "admin" ? items : primary.length ? primary : items;
 
   return (
     <nav className="mt-10 grid gap-2">
-      {items.map((item) => {
+      {showItems.map((item) => {
         const Icon = item.icon;
         const active = pathname.startsWith(item.href);
         return (

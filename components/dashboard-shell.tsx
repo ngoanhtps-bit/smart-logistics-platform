@@ -1,11 +1,15 @@
+"use client";
+
 import Link from "next/link";
 import { DashboardNav, DashboardSidebarExtras } from "@/components/dashboard-nav";
 import { DashboardUserMenu } from "@/components/dashboard-user-menu";
 import { NotificationsPanel } from "@/components/notifications-panel";
 import { CrossRoleSyncBanner } from "@/components/cross-role-sync-banner";
+import { useAuthStore } from "@/store/auth";
 import { SyncStatusBadge } from "@/components/sync-status-badge";
 
-export function DashboardShell({ children, title }: { children: React.ReactNode; title: string }) {
+function ShellBody({ children, title }: { children: React.ReactNode; title: string }) {
+  const role = useAuthStore((s) => s.user?.role);
   return (
     <div className="min-h-screen bg-[#f6f8fb]">
       <aside className="fixed inset-y-0 left-0 hidden w-72 border-r border-slate-200 bg-[#0f1f32] p-5 text-white lg:block">
@@ -28,10 +32,14 @@ export function DashboardShell({ children, title }: { children: React.ReactNode;
           </div>
         </header>
         <main className="p-4 md:p-8">
-          <CrossRoleSyncBanner />
+          {role === "admin" ? <CrossRoleSyncBanner /> : null}
           {children}
         </main>
       </div>
     </div>
   );
+}
+
+export function DashboardShell({ children, title }: { children: React.ReactNode; title: string }) {
+  return <ShellBody title={title}>{children}</ShellBody>;
 }

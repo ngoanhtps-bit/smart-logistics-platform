@@ -1,19 +1,19 @@
 import type { Metadata } from "next";
-import { CustomerDashboard } from "@/components/customer-dashboard";
+import { CustomerWorkspace } from "@/components/customer-workspace";
 import { DashboardAuthGuard } from "@/components/dashboard-auth-guard";
-import { DashboardShell } from "@/components/dashboard-shell";
+import { RoleWorkspaceShell } from "@/components/role-workspace-shell";
 
 export const metadata: Metadata = {
-  title: "Bảng khách hàng",
-  description: "Quản lý vận đơn, theo dõi, hóa đơn, chứng từ POD và thống kê của khách hàng."
+  title: "Không gian khách hàng",
+  description: "Tạo đơn, hành trình 6 bước, theo dõi GPS — liên kết điều phối & tài xế."
 };
 
 export default function CustomerPage() {
   return (
     <DashboardAuthGuard>
-      <DashboardShell title="Bảng khách hàng">
-        <CustomerDashboard />
-      </DashboardShell>
+      <RoleWorkspaceShell workspace="customer" title="Khách hàng">
+        <CustomerWorkspace />
+      </RoleWorkspaceShell>
     </DashboardAuthGuard>
   );
 }
